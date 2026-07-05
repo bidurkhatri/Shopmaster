@@ -1,8 +1,9 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/store";
+import { useHydrated } from "@/lib/useHydrated";
 import { BrandStyle } from "@/components/ui";
 import { SyncIndicator } from "@/components/SyncIndicator";
 
@@ -15,13 +16,14 @@ const NAV = [
 export function StaffShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const hydrated = useHydrated();
   const { token, user, organization, logout } = useAuth();
 
   useEffect(() => {
-    if (!token) router.replace("/login");
-  }, [token, router]);
+    if (hydrated && !token) router.replace("/login");
+  }, [hydrated, token, router]);
 
-  if (!token || !organization) {
+  if (!hydrated || !token || !organization) {
     return <div className="flex min-h-screen items-center justify-center text-slate-400">Loading…</div>;
   }
 

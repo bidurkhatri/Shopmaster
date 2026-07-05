@@ -191,6 +191,7 @@ function Pos() {
           {activeItems.map((it) => (
             <button
               key={it.id}
+              data-testid="menu-item"
               onClick={() => addItem(it)}
               disabled={!it.available}
               className={`tap rounded-2xl border p-4 text-left ${it.available ? "border-slate-200 bg-white hover:border-brand" : "border-slate-100 bg-slate-50 opacity-50"}`}

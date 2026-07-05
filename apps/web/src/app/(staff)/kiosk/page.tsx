@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/store";
+import { useHydrated } from "@/lib/useHydrated";
 import { Button, Money, BrandStyle } from "@/components/ui";
 import { enqueueEvents } from "@/lib/outbox";
 import { lineTotal, uid } from "@/lib/pricing";
@@ -20,6 +21,7 @@ interface Line {
 /** Self-service kiosk (KIOSK-01..06): locked, guided, big touch targets. Pay at counter fallback. */
 export default function KioskPage() {
   const router = useRouter();
+  const hydrated = useHydrated();
   const { token, organization, deviceId } = useAuth();
   const currency = organization?.currency ?? "AUD";
   const [menu, setMenu] = useState<MenuCategoryDTO[]>([]);
@@ -29,13 +31,14 @@ export default function KioskPage() {
   const [placedNo, setPlacedNo] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!hydrated) return;
     if (!token) {
       router.replace("/login");
       return;
     }
     api.get<MenuCategoryDTO[]>("/menu").then(setMenu);
     api.get<{ locations: { id: string }[] }>("/context").then((c) => setLocId(c.locations[0]?.id ?? null));
-  }, [token, router]);
+  }, [hydrated, token, router]);
 
   const subtotal = useMemo(() => cart.reduce((s, l) => s + lineTotal(l), 0), [cart]);
 
@@ -111,7 +114,7 @@ export default function KioskPage() {
             <h2 className="mb-3 text-lg font-bold">{c.name}</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {c.items.map((it) => (
-                <button key={it.id} onClick={() => add(it)} disabled={!it.available} className={`tap rounded-2xl border-2 p-5 text-left ${it.available ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50 opacity-50"}`}>
+                <button key={it.id} data-testid="menu-item" onClick={() => add(it)} disabled={!it.available} className={`tap rounded-2xl border-2 p-5 text-left ${it.available ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50 opacity-50"}`}>
                   <div className="text-lg font-bold">{it.name}</div>
                   <div className="mt-1 text-brand"><Money minor={it.priceMinor} currency={currency} /></div>
                 </button>

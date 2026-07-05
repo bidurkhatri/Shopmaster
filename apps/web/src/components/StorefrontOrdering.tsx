@@ -161,6 +161,7 @@ export function StorefrontOrdering({
             {cat.items.map((it) => (
               <button
                 key={it.id}
+                data-testid="menu-item"
                 onClick={() => add(it)}
                 disabled={!it.available}
                 className={`tap flex w-full items-center justify-between rounded-xl border p-3 text-left ${it.available ? "border-slate-200 bg-white hover:border-brand" : "border-slate-100 bg-slate-50 opacity-50"}`}

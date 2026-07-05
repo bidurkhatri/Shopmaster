@@ -1,0 +1,23 @@
+import { defineConfig } from "@playwright/test";
+
+const CHROME =
+  process.env.CHROME_BIN ?? "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+
+export default defineConfig({
+  testDir: "./tests",
+  timeout: 45_000,
+  expect: { timeout: 10_000 },
+  fullyParallel: false,
+  workers: 1,
+  retries: 0,
+  reporter: [["list"]],
+  use: {
+    baseURL: process.env.WEB_URL ?? "http://localhost:3000",
+    headless: true,
+    viewport: { width: 1280, height: 900 },
+    launchOptions: {
+      executablePath: CHROME,
+      args: ["--no-sandbox", "--disable-dev-shm-usage"],
+    },
+  },
+});

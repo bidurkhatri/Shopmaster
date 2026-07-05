@@ -9,6 +9,7 @@ import { ordersRouter } from "./routes/orders.js";
 import { publicOrdersRouter } from "./routes/public-orders.js";
 import { syncRouter } from "./routes/sync.js";
 import { reportsRouter } from "./routes/reports.js";
+import { contextRouter } from "./routes/context.js";
 
 export function createApp() {
   const app = express();
@@ -29,6 +30,7 @@ export function createApp() {
   app.use("/api", publicOrdersRouter);
   app.use("/api", syncRouter);
   app.use("/api", reportsRouter);
+  app.use("/api", contextRouter);
 
   app.use(errorHandler);
   return app;

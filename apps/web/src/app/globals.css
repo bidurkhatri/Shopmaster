@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand: #0f766e;
+  --brand-accent: #14b8a6;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+/* Big, thumb-friendly touch targets for POS/kiosk on tablets (HW-02 / KIOSK-02). */
+.tap {
+  @apply select-none transition active:scale-[0.98];
+}

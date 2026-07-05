@@ -45,7 +45,8 @@ scaffolded behind the real interface.
 | ID | Where |
 |---|---|
 | DB-01 on-device SQLite | client-side outbox (IndexedDB) mirrors this role |
-| DB-02 cloud Postgres | **SQLite here** (portable schema); RLS (DB-04) documented, app-layer guard active |
+| DB-02 cloud Postgres | **SQLite here** (portable schema in `schema.postgres.prisma`); on Postgres, RLS is the active 2nd layer |
+| DB-04 RLS as active second guard | `withTenantContext` + `prisma` proxy (`packages/db`), wired per authenticated request via `tenantContext` middleware; policies in `rls.sql`; verified both at SQL level and through the app primitive (`verify:rls`, `verify:rls:prisma`) |
 | DB-03/05 org+location scoping | every model carries `organizationId`; `tenancy.ts` |
 | DB-06..10 event log, replay, conflict, materialized view | `packages/core/order/replay.ts` + `service.ts` |
 | DB-12/13 indexes | `packages/db/prisma/schema.prisma` |

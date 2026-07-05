@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { authenticate } from "./auth-middleware.js";
+import { authenticate, tenantContext } from "./auth-middleware.js";
 import { errorHandler } from "./http.js";
 import { securityHeaders } from "./security.js";
 import { requestLogger } from "./logging.js";
@@ -28,6 +28,8 @@ export function createApp() {
 
   // Attach a validated tenant context from the Bearer token, if present, on every request.
   app.use(authenticate);
+  // Make Postgres RLS the active second layer by scoping each authenticated request (no-op on SQLite).
+  app.use(tenantContext);
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, service: "shopmaster-api", time: new Date().toISOString() });

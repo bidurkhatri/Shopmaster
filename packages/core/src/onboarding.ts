@@ -13,7 +13,7 @@
  * Everything is created in a single transaction so a failed signup never leaves a half-built tenant.
  * Patterns here mirror packages/core/src/menu.ts (i18n names, sort ordering) and the seed script.
  */
-import { prisma } from "@shopmaster/db";
+import { prisma, transactionally } from "@shopmaster/db";
 import { i18n, type BusinessType, type Currency } from "@shopmaster/shared";
 import { hashPassword, hashPin } from "./auth.js";
 
@@ -266,7 +266,7 @@ export async function createMerchant(input: CreateMerchantInput): Promise<Create
   const passwordHash = hashPassword(input.password);
   const pinHash = hashPin(input.pin);
 
-  return prisma.$transaction(async (tx) => {
+  return transactionally(async (tx) => {
     const org = await tx.organization.create({
       data: {
         name: orgName,

@@ -15,6 +15,7 @@
     "seed": "tsx prisma/seed.ts",
     "studio": "prisma studio",
     "verify:rls": "node scripts/verify-rls.mjs",
+    "verify:rls:prisma": "tsx scripts/verify-rls-prisma.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -93,3 +93,8 @@ jobs:
           psql "$DATABASE_URL" -f packages/db/prisma/rls.sql
       - name: Verify tenant isolation is enforced by the database (DB-04)
         run: pnpm --filter @shopmaster/db verify:rls
+      - name: Verify RLS through the app primitive (withTenantContext + prisma proxy)
+        env:
+          DATABASE_URL: ${{ env.RLS_APP_DATABASE_URL }}
+          RLS_OWNER_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/shopmaster
+        run: pnpm --filter @shopmaster/db verify:rls:prisma

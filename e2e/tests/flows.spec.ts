@@ -83,6 +83,24 @@ test("admin loyalty: rewards members with visits and points (CRM-01/02)", async 
   await shot(page, "16-admin-customers");
 });
 
+test("admin cash: open a shift then close and reconcile the drawer (POS-07)", async ({ page }) => {
+  await login(page);
+  await page.goto("/admin");
+  await page.getByRole("button", { name: "Cash", exact: true }).click();
+  await expect(page.getByText("Start a shift")).toBeVisible();
+  await page.getByPlaceholder("0.00").fill("100");
+  await page.getByRole("button", { name: "Open shift" }).click();
+  await expect(page.getByText("Drawer open")).toBeVisible();
+  await expect(page.getByText("Expected in drawer")).toBeVisible();
+  await shot(page, "17-admin-cash");
+  // Close and count the drawer — a fresh shift with no sales balances at the float.
+  await page.getByRole("button", { name: /Close.*count drawer/ }).click();
+  await expect(page.getByRole("heading", { name: "Close drawer" })).toBeVisible();
+  await page.getByPlaceholder("0.00").fill("100");
+  await page.getByRole("button", { name: "Close shift" }).click();
+  await expect(page.getByText("Balanced")).toBeVisible();
+});
+
 test("POS tipping: add a tip then charge cash (PAY-06)", async ({ page }) => {
   await login(page);
   await expect(page.getByRole("heading", { name: "Point of Sale" })).toBeVisible();

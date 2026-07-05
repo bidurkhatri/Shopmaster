@@ -36,6 +36,7 @@ import {
   IconPrinter,
   IconBox,
   IconHeart,
+  IconCash,
 } from "@/components/icons";
 import { api, API_BASE } from "@/lib/api";
 import { useAuth } from "@/lib/store";
@@ -48,6 +49,7 @@ import type {
   OrderStatus,
   InventoryReport,
   CustomerDTO,
+  ShiftDTO,
 } from "@shopmaster/shared";
 
 interface Ctx {
@@ -68,6 +70,7 @@ const TABS = [
   { key: "Menu", icon: IconMenuList },
   { key: "Inventory", icon: IconBox },
   { key: "Customers", icon: IconHeart },
+  { key: "Cash", icon: IconCash },
   { key: "Tables", icon: IconGrid },
   { key: "Staff", icon: IconUsers },
   { key: "Settings", icon: IconSettings },
@@ -94,6 +97,7 @@ function Admin() {
   const visibleTabs = TABS.filter((t) => {
     if (t.key === "Inventory") return capabilities?.features.inventory;
     if (t.key === "Customers") return capabilities?.features.loyalty;
+    if (t.key === "Cash") return capabilities?.features.cashManagement;
     if (t.key === "Tables") return capabilities?.features.tables;
     if (t.key === "Staff") return capabilities?.features.staffRoles;
     return true;
@@ -133,6 +137,7 @@ function Admin() {
       {tab === "Menu" && <MenuAdmin />}
       {tab === "Inventory" && <Inventory currency={currency} />}
       {tab === "Customers" && <Customers currency={currency} />}
+      {tab === "Cash" && <CashDrawer currency={currency} />}
       {tab === "Tables" && <Tables />}
       {tab === "Staff" && <Staff />}
       {tab === "Settings" && <Settings />}
@@ -1242,6 +1247,226 @@ function Customers({ currency }: { currency: string }) {
           ))}
         </div>
       </Card>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ cash / shifts */
+
+function CashDrawer({ currency }: { currency: string }) {
+  const toast = useToast();
+  const [current, setCurrent] = useState<ShiftDTO | null | undefined>(undefined); // undefined = loading
+  const [history, setHistory] = useState<ShiftDTO[] | null>(null);
+  const [float, setFloat] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [counted, setCounted] = useState("");
+
+  const load = async () => {
+    const [cur, list] = await Promise.all([
+      api.get<ShiftDTO | null>("/shifts/current").catch(() => null),
+      api.get<ShiftDTO[]>("/shifts").catch(() => []),
+    ]);
+    setCurrent(cur);
+    setHistory(list);
+  };
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function openShift() {
+    const floatMinor = Math.round(parseFloat(float || "0") * 100);
+    if (Number.isNaN(floatMinor) || floatMinor < 0) {
+      toast({ title: "Enter a valid opening float", tone: "error" });
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.post("/shifts/open", { openingFloatMinor: floatMinor });
+      setFloat("");
+      toast({ title: "Shift opened", tone: "success" });
+      await load();
+    } catch (e) {
+      toast({ title: errMsg(e), tone: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function closeShift() {
+    if (!current) return;
+    const countedMinor = Math.round(parseFloat(counted || "0") * 100);
+    if (Number.isNaN(countedMinor) || countedMinor < 0) {
+      toast({ title: "Enter the counted amount", tone: "error" });
+      return;
+    }
+    setBusy(true);
+    try {
+      const closed = await api.post<ShiftDTO>(`/shifts/${current.id}/close`, { countedCashMinor: countedMinor });
+      const v = closed.varianceMinor ?? 0;
+      toast({
+        title: v === 0 ? "Shift closed — drawer balanced" : `Shift closed — ${v > 0 ? "over" : "short"} ${Math.abs(v / 100).toFixed(2)}`,
+        tone: v === 0 ? "success" : "error",
+      });
+      setClosing(false);
+      setCounted("");
+      await load();
+    } catch (e) {
+      toast({ title: errMsg(e), tone: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (current === undefined || history === null) {
+    return (
+      <div className="space-y-4">
+        <Card className="p-5">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="mt-3 h-20 w-full" />
+        </Card>
+      </div>
+    );
+  }
+
+  const countedMinorPreview = Math.round(parseFloat(counted || "0") * 100);
+  const variancePreview = current && !Number.isNaN(countedMinorPreview) ? countedMinorPreview - (current.expectedCashMinor ?? 0) : 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Current shift or open form */}
+      {current ? (
+        <Card className="p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h3 className="flex items-center gap-2 font-semibold text-ink">
+                <IconCash className="h-4 w-4 text-brand" /> Drawer open
+              </h3>
+              <p className="mt-0.5 text-xs text-muted">
+                Opened {timeOf(current.openedAt)}
+                {current.openedByName && ` · ${current.openedByName}`}
+              </p>
+            </div>
+            <Badge tone="green">OPEN</Badge>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat label="Opening float" value={<Money minor={current.openingFloatMinor} currency={currency} />} />
+            <Stat label="Cash sales" value={<Money minor={current.cashSalesMinor ?? 0} currency={currency} />} />
+            <Stat label="Cash refunds" value={<Money minor={current.cashRefundsMinor ?? 0} currency={currency} />} />
+            <Stat label="Expected in drawer" value={<Money minor={current.expectedCashMinor ?? 0} currency={currency} />} />
+          </div>
+
+          <div className="mt-4">
+            <Button variant="secondary" onClick={() => setClosing(true)}>
+              Close &amp; count drawer
+            </Button>
+          </div>
+        </Card>
+      ) : (
+        <Card className="p-5">
+          <h3 className="mb-1 flex items-center gap-2 font-semibold text-ink">
+            <IconCash className="h-4 w-4 text-brand" /> Start a shift
+          </h3>
+          <p className="mb-3 text-sm text-muted">Count the cash you’re starting the drawer with, then open the shift.</p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <Field label="Opening float" hint="Cash in the drawer to start">
+              <Input inputMode="decimal" placeholder="0.00" value={float} onChange={(e) => setFloat(e.target.value)} />
+            </Field>
+            <Button loading={busy} onClick={openShift}>
+              Open shift
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* History */}
+      <Card className="overflow-hidden">
+        <div className="border-b border-line px-4 py-3">
+          <h3 className="text-sm font-semibold text-muted">Shift history</h3>
+        </div>
+        {history.filter((s) => s.status === "CLOSED").length === 0 ? (
+          <div className="py-6 text-center text-sm text-muted">No closed shifts yet.</div>
+        ) : (
+          <div className="divide-y divide-line">
+            {history
+              .filter((s) => s.status === "CLOSED")
+              .map((s) => {
+                const v = s.varianceMinor ?? 0;
+                return (
+                  <div key={s.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-ink">{timeOf(s.openedAt)}</div>
+                      <div className="mt-0.5 text-xs text-muted">
+                        {s.openedByName ?? "—"} · closed {s.closedAt ? timeOf(s.closedAt) : "—"}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-muted">Expected</div>
+                      <div className="font-medium text-ink">
+                        <Money minor={s.expectedCashMinor ?? 0} currency={currency} />
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-muted">Counted</div>
+                      <div className="font-medium text-ink">
+                        <Money minor={s.countedCashMinor ?? 0} currency={currency} />
+                      </div>
+                    </div>
+                    <Badge tone={v === 0 ? "green" : v > 0 ? "amber" : "rose"}>
+                      {v === 0 ? "Balanced" : `${v > 0 ? "+" : "−"}${Math.abs(v / 100).toFixed(2)}`}
+                    </Badge>
+                  </div>
+                );
+              })}
+          </div>
+        )}
+      </Card>
+
+      {/* Close modal */}
+      <Modal
+        open={closing}
+        onClose={() => setClosing(false)}
+        size="sm"
+        title="Close drawer"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setClosing(false)}>
+              Cancel
+            </Button>
+            <Button loading={busy} onClick={closeShift}>
+              Close shift
+            </Button>
+          </>
+        }
+      >
+        {current && (
+          <div className="space-y-3">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted">Expected in drawer</span>
+              <span className="font-semibold text-ink">
+                <Money minor={current.expectedCashMinor ?? 0} currency={currency} />
+              </span>
+            </div>
+            <Field label="Counted cash" hint="Total cash you counted in the drawer">
+              <Input inputMode="decimal" autoFocus placeholder="0.00" value={counted} onChange={(e) => setCounted(e.target.value)} />
+            </Field>
+            {counted && !Number.isNaN(countedMinorPreview) && (
+              <div className={`flex justify-between rounded-lg px-3 py-2 text-sm font-medium ${
+                variancePreview === 0
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+              }`}>
+                <span>{variancePreview === 0 ? "Balanced" : variancePreview > 0 ? "Over" : "Short"}</span>
+                <span>
+                  {variancePreview > 0 ? "+" : variancePreview < 0 ? "−" : ""}
+                  <Money minor={Math.abs(variancePreview)} currency={currency} />
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

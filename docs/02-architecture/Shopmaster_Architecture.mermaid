@@ -1,0 +1,114 @@
+---
+title: Shopmaster — Full System Architecture
+---
+flowchart TB
+
+subgraph LEGEND["Legend"]
+  direction LR
+  L1["Client / Channel"]
+  L2["Offline Layer"]
+  L3["Core Engine"]
+  L4["Shared Service"]
+  L5["Payment Adapter"]
+  L6["Peripheral (optional)"]
+  L7["Backend / Compliance"]
+end
+
+subgraph CHANNELS["Client / Channel Layer — same core app, different hardware tier"]
+  POS["Staff POS<br/>Android · iOS · Web<br/>tea stall to full restaurant"]
+  KIOSK["Self-Service Kiosk<br/>locked mode, any tablet"]
+  QRNFC["QR / NFC Ordering Page<br/>customer's own phone, no app"]
+  ONLINE["Branded Online Ordering<br/>merchant's own domain"]
+  ADMIN["Back-Office Admin Console<br/>web"]
+end
+
+subgraph OFFLINE["Offline-First Layer — staff devices only"]
+  LOCALDB[("Local Embedded DB<br/>source of truth while offline")]
+  SYNCQ["Sync Queue Service"]
+end
+
+subgraph BACKEND["Backend Infrastructure — Multi-Tenant Cloud"]
+  subgraph CORE["Core Commerce Engine — one API, every channel"]
+    ORDER["Order Service"]
+    MENU["Menu / Catalog Service"]
+    PRICING["Pricing & Tax Engine"]
+    TABLE["Table / Tab State"]
+  end
+  subgraph SHARED["Shared Services"]
+    PAYABS["Payments Abstraction Layer"]
+    INV["Inventory<br/>Phase 2"]
+    STAFF["Staff & Roles"]
+    CRM["CRM / Loyalty<br/>Phase 2-3"]
+    RPT["Reporting & Analytics"]
+  end
+  NPAUDIT[("Nepal In-Country Audit Server<br/>Growth/Enterprise Nepal tier")]
+end
+
+subgraph PAY["Payment Adapters — one per market/rail"]
+  TAP["Tap-to-Pay on Phone"]
+  READER["Bluetooth Card Reader"]
+  NPRAIL["Nepal Rails<br/>eSewa · Khalti · Fonepay"]
+  AURAIL["Australia Card/Bank Rails"]
+  TOKEN["PCI-DSS Tokenization<br/>no raw card data stored"]
+end
+
+subgraph PERIPH["Peripherals — optional, never required"]
+  PRINTER["Thermal Printer / KDS<br/>Bluetooth or LAN"]
+  DRAWER["Cash Drawer"]
+  NFCTAG["Passive NFC Table Tags"]
+  SCANNER["Barcode Scanner"]
+end
+
+IRD["Nepal IRD / CBMS<br/>real-time invoice reporting"]
+
+POS --> LOCALDB
+KIOSK --> LOCALDB
+LOCALDB <--> SYNCQ
+SYNCQ -->|"sync on reconnect"| ORDER
+QRNFC --> ORDER
+ONLINE --> ORDER
+NFCTAG -.->|"tap opens same page"| QRNFC
+ADMIN --> MENU
+ADMIN --> STAFF
+ADMIN --> PRICING
+ADMIN --> RPT
+ADMIN -.->|"generates"| QRNFC
+
+ORDER --> MENU
+ORDER --> PRICING
+ORDER --> TABLE
+ORDER --> PAYABS
+ORDER --> PRINTER
+ORDER --> INV
+ORDER --> RPT
+ORDER --> CRM
+
+PAYABS --> TAP
+PAYABS --> READER
+PAYABS --> NPRAIL
+PAYABS --> AURAIL
+TAP --> TOKEN
+READER --> TOKEN
+NPRAIL --> TOKEN
+AURAIL --> TOKEN
+
+POS -.-> SCANNER
+POS -.-> DRAWER
+
+NPAUDIT --> IRD
+
+classDef channel fill:#dbeafe,stroke:#2563eb,stroke-width:1px,color:#1e3a8a
+classDef offline fill:#fef3c7,stroke:#d97706,stroke-width:1px,color:#78350f
+classDef core fill:#ede9fe,stroke:#7c3aed,stroke-width:1px,color:#4c1d95
+classDef shared fill:#ccfbf1,stroke:#0d9488,stroke-width:1px,color:#134e4a
+classDef pay fill:#dcfce7,stroke:#16a34a,stroke-width:1px,color:#14532d
+classDef periph fill:#f3f4f6,stroke:#6b7280,stroke-width:1px,color:#374151
+classDef backend fill:#e0e7ff,stroke:#4338ca,stroke-width:1px,color:#312e81
+
+class POS,KIOSK,QRNFC,ONLINE,ADMIN,L1 channel
+class LOCALDB,SYNCQ,L2 offline
+class ORDER,MENU,PRICING,TABLE,L3 core
+class PAYABS,INV,STAFF,CRM,RPT,L4 shared
+class TAP,READER,NPRAIL,AURAIL,TOKEN,L5 pay
+class PRINTER,DRAWER,NFCTAG,SCANNER,L6 periph
+class NPAUDIT,IRD,L7 backend

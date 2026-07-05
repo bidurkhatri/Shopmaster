@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Prisma / SQLite
+packages/db/prisma/*.db
+packages/db/prisma/*.db-journal
+*.sqlite
+*.sqlite3
+
+# Env
+.env
+.env.local
+.env.*.local
+# ...except the db package's sqlite path, which is a local file path (not a secret) and
+# is needed for `prisma` CLI commands to work after a fresh clone.
+!packages/db/.env
+
+# Test / tooling
+coverage/
+playwright-report/
+test-results/
+e2e/.artifacts/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.log
+npm-debug.log*
+pnpm-debug.log*

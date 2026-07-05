@@ -1,0 +1,83 @@
+---
+title: Shopmaster — Core Entity Relationship Model
+---
+erDiagram
+    ORGANIZATION ||--o{ LOCATION : "operates"
+    ORGANIZATION ||--o{ STAFF_MEMBER : "employs"
+    ORGANIZATION ||--o{ MENU_CATEGORY : "defines"
+    ORGANIZATION ||--o{ INVENTORY_ITEM : "stocks (Phase 2)"
+    ORGANIZATION ||--o{ CUSTOMER_PROFILE : "has (Phase 2-3)"
+
+    LOCATION ||--o{ DEVICE : "hosts"
+    LOCATION ||--o{ TABLE_OR_TAB : "has"
+    LOCATION ||--o{ ORDER : "records"
+
+    MENU_CATEGORY ||--o{ MENU_ITEM : "contains"
+    MENU_ITEM ||--o{ MODIFIER : "offers"
+    MENU_ITEM ||--o{ ORDER_EVENT : "referenced by"
+
+    TABLE_OR_TAB ||--o{ ORDER : "assigned to"
+
+    ORDER ||--o{ ORDER_EVENT : "computed from"
+    ORDER ||--o{ PAYMENT : "settled by"
+
+    STAFF_MEMBER ||--o{ ORDER_EVENT : "generates"
+    STAFF_MEMBER ||--o{ AUDIT_LOG_ENTRY : "performs"
+    DEVICE ||--o{ ORDER_EVENT : "generates"
+    DEVICE ||--o{ AUDIT_LOG_ENTRY : "recorded on"
+
+    CUSTOMER_PROFILE ||--o{ ORDER : "places (optional, guest by default)"
+
+    ORGANIZATION {
+        uuid id PK
+        string name
+        string tier
+    }
+    LOCATION {
+        uuid id PK
+        uuid organization_id FK
+        string tax_jurisdiction
+    }
+    STAFF_MEMBER {
+        uuid id PK
+        uuid organization_id FK
+        string auth0_user_id
+        string role
+        string pin_hash
+    }
+    DEVICE {
+        uuid id PK
+        uuid organization_id FK
+        uuid location_id FK
+        timestamp last_seen
+    }
+    ORDER {
+        uuid id PK
+        uuid organization_id FK
+        uuid location_id FK
+        string status
+        decimal computed_total
+    }
+    ORDER_EVENT {
+        uuid id PK
+        uuid order_id FK
+        string type
+        uuid device_id FK
+        uuid staff_id FK
+        timestamp device_timestamp
+        string idempotency_key
+    }
+    PAYMENT {
+        uuid id PK
+        uuid order_id FK
+        string rail
+        string processor_token
+        string status
+    }
+    AUDIT_LOG_ENTRY {
+        uuid id PK
+        uuid actor_id FK
+        string action
+        uuid device_id FK
+        timestamp created_at
+    }

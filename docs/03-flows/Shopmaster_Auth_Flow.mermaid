@@ -1,0 +1,55 @@
+---
+title: Shopmaster — Two-Tier Authentication Flow
+---
+flowchart TB
+
+subgraph LEGEND["Legend"]
+  direction LR
+  L1["Tier 1 — Auth0 (online)"]
+  L2["Tier 2 — Local (offline-capable)"]
+  L3["Reconnect / sync"]
+end
+
+subgraph TIER1["Tier 1 — Device Pairing, via Auth0 (requires connectivity, happens rarely)"]
+  A1["Owner or Manager opens the app on a new device"]
+  A2["Auth0 Universal Login<br/>Authorization Code + PKCE"]
+  A3["Auth0 issues a device-scoped refresh token<br/>plus organization_id, role, location_ids claims"]
+  A4["Device stores the credential, encrypted at rest"]
+  A5["Admin console marks the device as Paired"]
+  A6["Staff PIN table syncs to the device<br/>hashed, per admin-set PINs"]
+end
+
+subgraph TIER2["Tier 2 — Staff Switch, fully local (zero connectivity needed)"]
+  B1["Staff member selects their name on the device"]
+  B2["Enters local PIN"]
+  B3{"Matches cached hash?"}
+  B4["Session unlocked — role and permissions loaded from last-synced claims"]
+  B5["Action logged locally: staff ID, device ID, timestamp"]
+  B6["Wrong PIN — retry, then lockout after repeated failures"]
+end
+
+subgraph SYNCBACK["Reconnect"]
+  C1["Device regains connectivity"]
+  C2["Locally logged actions sync to Order and Audit services"]
+  C3["Fresh role and permission claims pulled if anything changed"]
+end
+
+A1 --> A2 --> A3 --> A4 --> A5
+A4 --> A6
+A6 --> B1
+B1 --> B2 --> B3
+B3 -->|"yes"| B4
+B3 -->|"no"| B6
+B6 --> B2
+B4 --> B5
+B5 -.->|"whenever signal returns"| C1
+C1 --> C2 --> C3
+C3 -.->|"refresh cache"| A6
+
+classDef tier1 fill:#dbeafe,stroke:#2563eb,stroke-width:1px,color:#1e3a8a
+classDef tier2 fill:#fef3c7,stroke:#d97706,stroke-width:1px,color:#78350f
+classDef sync fill:#ccfbf1,stroke:#0d9488,stroke-width:1px,color:#134e4a
+
+class A1,A2,A3,A4,A5,A6,L1 tier1
+class B1,B2,B3,B4,B5,B6,L2 tier2
+class C1,C2,C3,L3 sync

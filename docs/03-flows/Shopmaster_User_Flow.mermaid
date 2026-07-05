@@ -1,0 +1,81 @@
+---
+title: Shopmaster — Full Order User Flow
+---
+flowchart TB
+
+subgraph LEGEND["Legend"]
+  direction LR
+  LC["Customer step"]
+  LS["Staff / kitchen step"]
+  LY["System step"]
+  LD{"Decision"}
+  LE(["Start / End"])
+end
+
+BEGIN(["Order journey begins"])
+BEGIN --> ENTRY{"How does the order start?"}
+
+ENTRY -->|"Dine-in: scans QR or taps NFC"| QRSTART["Customer opens the table's ordering page"]
+ENTRY -->|"Self-order at kiosk"| KIOSKSTART["Customer starts order at kiosk"]
+ENTRY -->|"Orders on own device"| ONLINESTART["Customer opens branded online ordering site"]
+ENTRY -->|"Staff takes the order"| POSSTART["Staff opens POS, starts order or table"]
+
+ONLINESTART --> FULFILL_TYPE{"Pickup or delivery?"}
+FULFILL_TYPE -->|"Pickup"| BROWSE
+FULFILL_TYPE -->|"Delivery"| ADDR["Customer enters delivery address"]
+ADDR --> BROWSE
+
+QRSTART --> BROWSE
+KIOSKSTART --> BROWSE
+POSSTART --> BROWSE
+
+BROWSE["Browse menu, add items and modifiers"]
+BROWSE --> CART{"Anything else before sending?"}
+CART -->|"Call waiter / special request"| ASSIST["Staff responds, order stays open"]
+ASSIST --> CART
+CART -->|"Ready to send"| PAYWHEN{"Pay now, or pay at the end?"}
+
+PAYWHEN -->|"Pay now — kiosk, online, counter"| PAYCAP["Capture payment"]
+PAYWHEN -->|"Pay later — table tab, running bill"| SENDKITCHEN
+
+PAYCAP --> ONLINE_CHECK{"Device connected?"}
+ONLINE_CHECK -->|"Yes"| PROCESSPAY["Payments Abstraction routes to card / wallet / local rail, tokenized"]
+ONLINE_CHECK -->|"No — offline"| CASHFALLBACK["Card unavailable offline — fall back to cash, or queue for later"]
+PROCESSPAY --> SENDKITCHEN
+CASHFALLBACK --> SENDKITCHEN
+
+SENDKITCHEN["Order confirmed — ticket routes to kitchen printer or display"]
+SENDKITCHEN --> PREP["Kitchen prepares the order"]
+PREP --> READY["Item marked ready"]
+READY --> HOWSERVED{"How does it reach the customer?"}
+
+HOWSERVED -->|"Dine-in"| SERVE["Staff serves at table, or number is called"]
+HOWSERVED -->|"Pickup"| NOTIFY["Customer notified: order ready"]
+HOWSERVED -->|"Delivery"| RIDER["Handed to delivery rider"]
+
+SERVE --> STILLOWED{"Was payment already taken?"}
+STILLOWED -->|"No — open tab"| CLOSEBILL["Staff closes bill: split by item, seat, or evenly, takes payment"]
+STILLOWED -->|"Yes"| COMPLETE
+CLOSEBILL --> COMPLETE
+
+NOTIFY --> PICKUP["Customer collects at counter"]
+PICKUP --> COMPLETE
+RIDER --> DELIVERED["Delivered to customer"]
+DELIVERED --> COMPLETE
+
+COMPLETE["Order closed"]
+COMPLETE --> RECEIPT["Digital or printed receipt issued"]
+RECEIPT --> BACKOFFICE["Feeds reporting, inventory deduction, and CRM/loyalty points"]
+BACKOFFICE --> FINISH(["Order lifecycle complete"])
+
+classDef customer fill:#dbeafe,stroke:#2563eb,stroke-width:1px,color:#1e3a8a
+classDef staff fill:#fed7aa,stroke:#ea580c,stroke-width:1px,color:#7c2d12
+classDef system fill:#ccfbf1,stroke:#0d9488,stroke-width:1px,color:#134e4a
+classDef decision fill:#fef3c7,stroke:#d97706,stroke-width:1px,color:#78350f
+classDef terminal fill:#e2e8f0,stroke:#475569,stroke-width:1px,color:#1e293b
+
+class QRSTART,KIOSKSTART,ONLINESTART,ADDR,PICKUP,LC customer
+class POSSTART,ASSIST,SERVE,CLOSEBILL,PREP,READY,RIDER,DELIVERED,NOTIFY,LS staff
+class BROWSE,PAYCAP,PROCESSPAY,CASHFALLBACK,SENDKITCHEN,COMPLETE,RECEIPT,BACKOFFICE,LY system
+class ENTRY,FULFILL_TYPE,CART,PAYWHEN,ONLINE_CHECK,HOWSERVED,STILLOWED,LD decision
+class BEGIN,FINISH,LE terminal

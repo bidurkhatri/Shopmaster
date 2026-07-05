@@ -1,0 +1,39 @@
+{
+  "name": "shopmaster",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ShopMaster — one order engine, four channels (POS, kiosk, QR/NFC, branded online) for cafes, bars, restaurants and food trucks across Nepal and Australia.",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "db:push": "pnpm --filter @shopmaster/db db:push",
+    "db:generate": "pnpm --filter @shopmaster/db generate",
+    "db:seed": "pnpm --filter @shopmaster/db seed",
+    "db:setup": "pnpm db:generate && pnpm db:push && pnpm db:seed",
+    "dev:api": "pnpm --filter @shopmaster/api dev",
+    "dev:web": "pnpm --filter @shopmaster/web dev",
+    "dev": "pnpm --filter @shopmaster/api --filter @shopmaster/web --parallel dev",
+    "build": "pnpm --filter @shopmaster/api build && pnpm --filter @shopmaster/web build",
+    "start:api": "pnpm --filter @shopmaster/api start",
+    "start:web": "pnpm --filter @shopmaster/web start",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm --filter @shopmaster/core test",
+    "e2e": "pnpm --filter @shopmaster/e2e test"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "esbuild",
+      "@parcel/watcher",
+      "sharp"
+    ]
+  }
+}

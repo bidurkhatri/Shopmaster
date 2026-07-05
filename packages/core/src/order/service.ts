@@ -4,7 +4,7 @@
  * and are safe to rebuild at any time (DB-10). Payment, status and item mutations all go through
  * events so POS, QR, kiosk and online behave identically and offline batches merge deterministically.
  */
-import { prisma, type Prisma } from "@shopmaster/db";
+import { prisma, transactionally, type Prisma } from "@shopmaster/db";
 import { resolveCapabilities, type OrderEventType, type PaymentRail, type OrderDTO, type Channel, type Fulfillment, type OrderStatus, type Tier, type BusinessType } from "@shopmaster/shared";
 import { replayOrder, type ReplayEvent, type MaterializedOrder } from "./replay.js";
 import type { TaxConfig } from "../pricing-tax.js";
@@ -96,7 +96,7 @@ export async function rebuildOrder(orderId: string): Promise<MaterializedOrder> 
   const tax: TaxConfig = { taxRateBps: order.location.taxRateBps, taxInclusive: order.location.taxInclusive };
   const state = replayOrder(replayEvents, tax);
 
-  await prisma.$transaction(async (tx) => {
+  await transactionally(async (tx) => {
     await tx.orderItem.deleteMany({ where: { orderId } });
     for (const it of state.items) {
       await tx.orderItem.create({

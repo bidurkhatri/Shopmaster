@@ -11,7 +11,7 @@
  *
  * Deduction is idempotent per order: a replayed/duplicated confirm can't double-deduct.
  */
-import { prisma } from "@shopmaster/db";
+import { prisma, withTenantContext } from "@shopmaster/db";
 import { pickText, type Locale, type InventoryReport, type StockMovementDTO } from "@shopmaster/shared";
 import { assertTenant, type TenantContext } from "./tenancy.js";
 import { onDomainEvent, type DomainEvent } from "./events/emitter.js";
@@ -183,8 +183,9 @@ export function registerInventorySubscriber(): void {
   subscribed = true;
   onDomainEvent((e: DomainEvent) => {
     if (e.type === "order.confirmed") {
-      // Fire-and-forget: a stock write must never block or break confirming an order.
-      deductForOrder(e.orderId).catch(() => {
+      // Fire-and-forget: a stock write must never block or break confirming an order. Run it in its
+      // own tenant context so it's RLS-scoped on Postgres even though it escapes the request's txn.
+      withTenantContext(e.organizationId, () => deductForOrder(e.orderId)).catch(() => {
         /* swallowed — audit stays consistent on the next rebuild/confirm */
       });
     }

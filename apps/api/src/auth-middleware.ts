@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { verifySession } from "@shopmaster/core";
+import { withTenantContext, usingPostgres } from "@shopmaster/db";
 import { permissionsFor, type Permission, type Role } from "@shopmaster/shared";
 import { HttpError } from "./http.js";
 
@@ -24,6 +25,30 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
   } catch {
     next(); // invalid token → treated as unauthenticated; requireAuth will reject
   }
+}
+
+/**
+ * Make Postgres RLS (DB-04) the *active* second layer: run each authenticated request inside its
+ * caller's tenant context, so every query issued through the `prisma` proxy has `app.org_id` set and
+ * the database itself refuses cross-tenant rows underneath the app-layer scoping. No-op on SQLite
+ * (no RLS) and for unauthenticated requests, so the self-contained run and public routes are
+ * unaffected. The transaction stays open until the response finishes, then commits.
+ */
+export function tenantContext(req: Request, res: Response, next: NextFunction): void {
+  const ctx = req.ctx;
+  if (!usingPostgres || !ctx?.organizationId) {
+    next();
+    return;
+  }
+  void withTenantContext(
+    ctx.organizationId,
+    () =>
+      new Promise<void>((resolve) => {
+        res.once("finish", resolve);
+        res.once("close", resolve);
+        next();
+      }),
+  ).catch(next);
 }
 
 export function requireAuth(req: Request, _res: Response, next: NextFunction): void {

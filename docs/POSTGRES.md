@@ -257,19 +257,41 @@ RLS_APP_DATABASE_URL=postgresql://shopmaster_app:app_pw@host:5432/shopmaster \
 pnpm --filter @shopmaster/db verify:rls
 ```
 
-## Remaining wiring to make RLS the *active* second layer in the app
+## RLS as the *active* second layer in the app (wired)
 
-App-layer scoping (`packages/core/src/tenancy.ts`) is the primary enforcement today and is always on.
-To also have RLS enforce at runtime, the API must connect as `shopmaster_app` (not a superuser — the
-seed/migrate role) and set the GUC per transaction from the validated `TenantContext`:
+App-layer scoping (`packages/core/src/tenancy.ts`) is the primary enforcement and is always on. On
+Postgres, RLS is now the active second layer underneath it — no extra step needed beyond connecting
+as the non-superuser `shopmaster_app` role:
 
-```ts
-await prisma.$transaction(async (tx) => {
-  await tx.$executeRawUnsafe(`SELECT set_config('app.org_id', $1, true)`, ctx.organizationId);
-  // ... tenant-scoped queries run here, now doubly guarded ...
-});
+- `packages/db/src/index.ts` exports the `prisma` client as a thin **proxy** over the base client.
+  When work runs inside `withTenantContext(orgId, …)`, the proxy transparently routes every query to a
+  transaction that has `SELECT set_config('app.org_id', …, true)` set — so RLS filters. Outside any
+  context (and always on SQLite, where `usingPostgres` is false) it hits the base client unchanged.
+- The API wraps every **authenticated** request in that context via the `tenantContext` middleware
+  (`apps/api/src/auth-middleware.ts`), so all tenant-scoped queries in the request are doubly guarded.
+- `transactionally()` reuses the ambient tenant transaction so core code (e.g. order replay) never
+  opens an unsupported *nested* interactive transaction.
+- The fire-and-forget inventory deduction runs in its own `withTenantContext`, so it stays RLS-scoped
+  even though it escapes the request transaction.
+
+Because the proxy is a no-op when `DATABASE_URL` isn't Postgres, the self-contained SQLite run and the
+whole test suite are unaffected.
+
+### Verify (both layers)
+
+```bash
+# 1) Policies at the SQL level (hand-set GUC):
+DATABASE_URL=postgresql://postgres@host:5432/shopmaster \
+RLS_APP_DATABASE_URL=postgresql://shopmaster_app:app_pw@host:5432/shopmaster \
+pnpm --filter @shopmaster/db verify:rls
+
+# 2) The actual app primitive (withTenantContext + prisma proxy), connecting as the app role:
+DATABASE_URL=postgresql://shopmaster_app:app_pw@host:5432/shopmaster \
+RLS_OWNER_DATABASE_URL=postgresql://postgres@host:5432/shopmaster \
+pnpm --filter @shopmaster/db verify:rls:prisma
 ```
 
-This is a deliberate, reviewable change (it routes tenant-scoped data access through a per-request
-transaction) and is the one remaining step to flip DB-04 from "verified correct" to "enforced in the
-running app". The policies themselves are proven correct above.
+Both run in the `postgres-rls` CI job. The one remaining production consideration is the **bootstrap**
+paths that create a tenant before any context exists (public signup) or derive it per-request (public
+QR/online orders); those must run as a role that can insert the first rows — see the app-role grants
+in `rls.sql`.

@@ -210,6 +210,7 @@ model Order {
   taxMinor        Int       @default(0)
   totalMinor      Int       @default(0)
   paidMinor       Int       @default(0)
+  tipMinor        Int       @default(0)
   customerId      String?
   customerName    String?
   customerPhone   String?
@@ -258,6 +259,7 @@ model Payment {
   orderId        String
   rail           String // CASH | FONEPAY | ESEWA | KHALTI | TYRO
   amountMinor    Int
+  tipMinor       Int      @default(0)
   currency       String
   status         String   @default("PENDING") // PENDING | AUTHORIZED | CAPTURED | FAILED | REFUNDED
   processorToken String?
@@ -290,11 +292,12 @@ model AuditLogEntry {
   @@index([organizationId, createdAt])
 }
 
-/// Opt-in only (CRM-01). Phase 2/3.
+/// Opt-in customer profile (CRM-01). Created only when a customer joins rewards; keyed by contact
+/// method so repeat visits attach to the same profile and loyalty accrues (CRM-02).
 model CustomerProfile {
   id             String   @id @default(cuid())
   organizationId String
-  contactMethod  String
+  contactMethod  String // phone or email the customer gave — the loyalty identity
   name           String?
   optInMarketing Boolean  @default(false)
   createdAt      DateTime @default(now())
@@ -302,10 +305,11 @@ model CustomerProfile {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   orders       Order[]
 
+  @@unique([organizationId, contactMethod])
   @@index([organizationId])
 }
 
-/// Phase 2 — schema exists from v1 so Order Service needs no breaking change to call it later (BE-03).
+/// Stock tracking (INV-01/02) — schema exists from v1 so the Order Service needs no breaking change.
 model InventoryItem {
   id             String @id @default(cuid())
   organizationId String
@@ -317,4 +321,41 @@ model InventoryItem {
   menuItem     MenuItem     @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
+}
+
+/// A cashier's drawer session (POS-07). Cash is reconciled at close: expected (opening float +
+/// cash sales − cash refunds) vs the amount counted, with the variance recorded.
+model Shift {
+  id                String    @id @default(cuid())
+  organizationId    String
+  locationId        String
+  openedById        String?
+  openedByName      String?
+  openingFloatMinor Int       @default(0)
+  openedAt          DateTime  @default(now())
+  closedAt          DateTime?
+  countedCashMinor  Int?
+  expectedCashMinor Int?
+  cashSalesMinor    Int?
+  cashRefundsMinor  Int?
+  varianceMinor     Int?
+  note              String?
+  status            String    @default("OPEN") // OPEN | CLOSED
+
+  @@index([organizationId, openedAt])
+  @@index([locationId, status])
+}
+
+/// Audit of stock changes (INV): auto-deductions on orders and manual adjustments.
+model StockMovement {
+  id             String   @id @default(cuid())
+  organizationId String
+  menuItemId     String
+  delta          Int // negative = sold/deducted, positive = restock
+  reason         String // ORDER | ADJUST | RESTOCK
+  orderId        String?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([menuItemId])
 }

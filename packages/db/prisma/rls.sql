@@ -15,7 +15,8 @@ DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY[
     'Location','StaffMember','Device','MenuCategory','MenuItem',
-    'OrderEvent','Order','Payment','AuditLogEntry','CustomerProfile','InventoryItem'
+    'OrderEvent','Order','Payment','AuditLogEntry','CustomerProfile','InventoryItem',
+    'Shift','StockMovement'
   ] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);

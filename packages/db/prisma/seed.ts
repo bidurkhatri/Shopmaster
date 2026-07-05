@@ -40,6 +40,8 @@ async function reset() {
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
   await prisma.auditLogEntry.deleteMany();
+  await prisma.shift.deleteMany();
+  await prisma.stockMovement.deleteMany();
   await prisma.inventoryItem.deleteMany();
   await prisma.modifier.deleteMany();
   await prisma.menuItem.deleteMany();

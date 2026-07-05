@@ -315,6 +315,30 @@ model InventoryItem {
   @@index([organizationId])
 }
 
+/// A cashier's drawer session (POS-07). Cash is reconciled at close: expected (opening float +
+/// cash sales − cash refunds during the session) vs the amount physically counted, and the variance
+/// is recorded. Uses plain-string tenant/actor keys like StockMovement — no relations needed.
+model Shift {
+  id                String    @id @default(cuid())
+  organizationId    String
+  locationId        String
+  openedById        String?
+  openedByName      String?
+  openingFloatMinor Int       @default(0)
+  openedAt          DateTime  @default(now())
+  closedAt          DateTime?
+  countedCashMinor  Int? // physically counted at close
+  expectedCashMinor Int? // float + cash sales − cash refunds, snapshot at close
+  cashSalesMinor    Int? // cash captured during the session
+  cashRefundsMinor  Int? // cash refunded during the session
+  varianceMinor     Int? // counted − expected (negative = short)
+  note              String?
+  status            String    @default("OPEN") // OPEN | CLOSED
+
+  @@index([organizationId, openedAt])
+  @@index([locationId, status])
+}
+
 /// Audit of stock changes (INV): auto-deductions on orders and manual adjustments.
 model StockMovement {
   id             String   @id @default(cuid())

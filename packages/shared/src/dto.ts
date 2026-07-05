@@ -193,6 +193,41 @@ export const zCreateOrderRequest = z.object({
   note: z.string().optional(),
 });
 
+/* ------------------------------- Shifts / cash reconciliation (POS-07) ------------------------------- */
+
+export interface ShiftDTO {
+  id: string;
+  locationId: string;
+  openedByName: string | null;
+  status: "OPEN" | "CLOSED";
+  openingFloatMinor: number;
+  openedAt: string;
+  closedAt: string | null;
+  cashSalesMinor: number | null;
+  cashRefundsMinor: number | null;
+  expectedCashMinor: number | null;
+  countedCashMinor: number | null;
+  varianceMinor: number | null;
+  note: string | null;
+}
+
+/** Live drawer math for an OPEN shift (expected cash so far), computed on read. */
+export interface ShiftLiveTotals {
+  cashSalesMinor: number;
+  cashRefundsMinor: number;
+  expectedCashMinor: number; // openingFloat + cashSales − cashRefunds
+}
+
+export const zOpenShiftRequest = z.object({
+  locationId: z.string().optional(),
+  openingFloatMinor: z.number().int().nonnegative(),
+});
+
+export const zCloseShiftRequest = z.object({
+  countedCashMinor: z.number().int().nonnegative(),
+  note: z.string().optional(),
+});
+
 /* ------------------------------- Loyalty / CRM (CRM-01/02) ------------------------------- */
 
 export interface CustomerDTO {

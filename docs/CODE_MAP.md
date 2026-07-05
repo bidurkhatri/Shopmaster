@@ -11,6 +11,7 @@ scaffolded behind the real interface.
 | POS-10, LOC-02 | Per-jurisdiction line-item tax (NP VAT incl / AU GST excl) | `packages/core/pricing-tax.ts` | ✅ (unit-tested) |
 | PAY-06 | Tipping (percentage presets + custom, per-payment, reported/paid out separately) | `apps/web/.../pos` payment modal, `core/order`, `core/reporting.ts` | ✅ |
 | POS-12 | Quick mode (three-button tea stall) | `resolveCapabilities` + `apps/web/.../pos` | ✅ |
+| POS-07 | Shift management + cash-drawer reconciliation (float, cash sales/refunds, expected vs counted, variance) | `packages/core/shift.ts`, `/shifts`, `apps/web/.../admin` Cash tab | ✅ (Growth+) |
 | KIOSK-01..06 | Self-service kiosk, guided, order-ready | `apps/web/.../kiosk` | ✅ UI; OS-level lockdown (FE-08) stubbed |
 | QR-01..06 | QR/NFC table ordering, no app | `apps/web/.../t/[qrToken]`, `/tables/:qrToken` | ✅ |
 | WEB-01..06 | Branded online ordering, no commission | `apps/web/.../s/[slug]`, `StorefrontOrdering` | ✅ |

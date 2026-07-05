@@ -8,5 +8,6 @@ export * from "./order/service.js";
 export * from "./menu.js";
 export * from "./inventory.js";
 export * from "./crm.js";
+export * from "./shift.js";
 export * from "./reporting.js";
 export * from "./onboarding.js";

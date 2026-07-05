@@ -72,6 +72,18 @@ hitting zero auto-86's the item across every channel, restocking above zero rest
 Profiles are created only on opt-in: the public order body accepts `loyaltyOptIn` and, when the
 merchant's tier includes loyalty, links the order to a profile keyed by `customerPhone`.
 
+## Shifts / cash reconciliation (auth, Growth+ — POS-07)
+
+| Method | Path | Perm | Body | Returns |
+|---|---|---|---|---|
+| GET | `/shifts` | `reports.view` | — | `ShiftDTO[]` (recent; open carry live totals) |
+| GET | `/shifts/current?locationId=` | `order.pay` | — | `ShiftDTO \| null` (live drawer math) |
+| POST | `/shifts/open` | `order.pay` | `{ locationId?, openingFloatMinor }` | `ShiftDTO` |
+| POST | `/shifts/:id/close` | `order.pay` | `{ countedCashMinor, note? }` | `ShiftDTO` (expected/counted/variance) |
+
+Expected cash = opening float + cash sales − cash refunds during the session; variance = counted −
+expected. Only one shift may be open per location at a time.
+
 ## Orders (auth staff)
 
 | Method | Path | Perm | Body | Returns |

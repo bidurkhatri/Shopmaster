@@ -36,5 +36,24 @@ export const prisma: PrismaClient =
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
+/**
+ * Run `fn` with Postgres Row-Level Security scoped to one organization (DB-04). On Postgres it opens
+ * a transaction and sets the `app.org_id` GUC that the RLS policies key off (SET LOCAL = pool-safe),
+ * so every query inside is doubly guarded (app-layer scoping + RLS). On SQLite (no RLS) it just runs
+ * `fn` against the base client. This is the primitive to wrap authenticated request handling in to
+ * make RLS the *active* second layer app-wide; verified working via `pnpm --filter @shopmaster/db verify:rls`.
+ */
+export async function withTenantContext<T>(
+  organizationId: string,
+  fn: (client: PrismaClient) => Promise<T>,
+): Promise<T> {
+  const isPostgres = (process.env.DATABASE_URL ?? "").startsWith("postgres");
+  if (!isPostgres) return fn(prisma);
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe("SELECT set_config('app.org_id', $1, true)", organizationId);
+    return fn(tx as unknown as PrismaClient);
+  });
+}
+
 export { Prisma, PrismaClient };
 export * from "@prisma/client";

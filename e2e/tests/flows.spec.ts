@@ -56,6 +56,39 @@ test("admin dashboard renders sales report", async ({ page }) => {
   await shot(page, "07-admin-tables");
 });
 
+test("admin inventory: stock levels and low-stock alert (INV-01/02)", async ({ page }) => {
+  await login(page);
+  await page.goto("/admin");
+  // Growth-tier merchant → the Inventory tab is enabled by the capability manifest.
+  await page.getByRole("button", { name: "Inventory" }).click();
+  await expect(page.getByText("Stock levels")).toBeVisible();
+  await expect(page.getByText("Tracked items")).toBeVisible();
+  // Two seeded items sit below their reorder point → the low-stock banner shows.
+  await expect(page.getByText(/at or below the reorder point/)).toBeVisible();
+  await shot(page, "13-admin-inventory");
+  // The set-stock (stock-take) dialog opens with editable fields (exact match avoids "Settings").
+  await page.getByRole("button", { name: "Set", exact: true }).first().click();
+  await expect(page.getByText("On hand")).toBeVisible();
+});
+
+test("POS tipping: add a tip then charge cash (PAY-06)", async ({ page }) => {
+  await login(page);
+  await expect(page.getByRole("heading", { name: "Point of Sale" })).toBeVisible();
+  // Match the proven POS flow — two taps reliably put an item in the cart even if the first opens
+  // the modifier sheet — so "Take Payment" is enabled.
+  await page.getByTestId("menu-item").nth(0).click();
+  await page.getByTestId("menu-item").nth(1).click();
+  await expect(page.getByRole("button", { name: "Take Payment" })).toBeEnabled();
+  await page.getByRole("button", { name: "Take Payment" }).click();
+  await expect(page.getByRole("heading", { name: "Take Payment" })).toBeVisible();
+  // Apply a 10% tip — the amount due updates to include it.
+  await page.getByRole("button", { name: "10%" }).click();
+  await expect(page.getByText(/Incl. tip/)).toBeVisible();
+  await shot(page, "14-pos-tip");
+  await page.getByRole("button", { name: "Charge Cash" }).click();
+  await expect(page.getByText(/Paid/)).toBeVisible();
+});
+
 test("customer QR ordering: scan table → order → confirmation", async ({ page }) => {
   await page.goto("/t/hv-t5");
   await expect(page.getByRole("heading", { name: "Harbour View Kitchen" })).toBeVisible();

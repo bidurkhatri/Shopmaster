@@ -47,6 +47,7 @@ export const zPaymentCapturedPayload = z.object({
   paymentId: z.string().optional(),
   rail: zPaymentRail,
   amountMinor: z.number().int().positive(),
+  tipMinor: z.number().int().nonnegative().optional(), // PAY-06: gratuity added at capture
   tenderedMinor: z.number().int().optional(),
   changeMinor: z.number().int().optional(),
   processorToken: z.string().optional(),

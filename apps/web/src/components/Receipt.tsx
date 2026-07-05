@@ -109,6 +109,7 @@ export function Receipt({
                 <Money minor={order.totalMinor} currency={currency} />
               </span>
             </div>
+            {order.tipMinor > 0 && <Row label="Tip" value={<Money minor={order.tipMinor} currency={currency} />} muted />}
           </div>
 
           {order.paidMinor > 0 && (

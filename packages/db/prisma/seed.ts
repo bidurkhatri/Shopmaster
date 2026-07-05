@@ -232,6 +232,17 @@ async function seedRestaurant() {
     ],
   });
 
+  // Inventory (INV) — a few tracked items; two start below their reorder point to show low-stock alerts.
+  await prisma.inventoryItem.createMany({
+    data: [
+      { organizationId: org.id, menuItemId: burger.id, stockLevel: 14, reorderPoint: 6 },
+      { organizationId: org.id, menuItemId: fishChips.id, stockLevel: 3, reorderPoint: 5 },
+      { organizationId: org.id, menuItemId: lager.id, stockLevel: 48, reorderPoint: 12 },
+      { organizationId: org.id, menuItemId: avoToast.id, stockLevel: 9, reorderPoint: 4 },
+      { organizationId: org.id, menuItemId: bigBreak.id, stockLevel: 2, reorderPoint: 4 },
+    ],
+  });
+
   // Historical orders across the last 6 days for the reporting dashboard.
   const menu = { flatWhite, avoToast, bigBreak, burger, fishChips, lager };
   const plan: Array<{

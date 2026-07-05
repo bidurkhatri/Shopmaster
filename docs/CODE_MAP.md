@@ -9,6 +9,7 @@ scaffolded behind the real interface.
 |---|---|---|---|
 | POS-01,02,04,06 | Order entry, kitchen routing, split, multi-tender | `apps/web/.../pos`, `packages/core/order` | ✅ |
 | POS-10, LOC-02 | Per-jurisdiction line-item tax (NP VAT incl / AU GST excl) | `packages/core/pricing-tax.ts` | ✅ (unit-tested) |
+| PAY-06 | Tipping (percentage presets + custom, per-payment, reported/paid out separately) | `apps/web/.../pos` payment modal, `core/order`, `core/reporting.ts` | ✅ |
 | POS-12 | Quick mode (three-button tea stall) | `resolveCapabilities` + `apps/web/.../pos` | ✅ |
 | KIOSK-01..06 | Self-service kiosk, guided, order-ready | `apps/web/.../kiosk` | ✅ UI; OS-level lockdown (FE-08) stubbed |
 | QR-01..06 | QR/NFC table ordering, no app | `apps/web/.../t/[qrToken]`, `/tables/:qrToken` | ✅ |
@@ -21,7 +22,8 @@ scaffolded behind the real interface.
 | SYNC-01..05 | Offline order/cash, outbox, conflict merge, status indicator | `apps/web/src/lib/outbox.ts`, `/sync`, replay | ✅ |
 | ADMIN-01,02 | Web console, config | `apps/web/.../admin` | ✅ |
 | LOC-01,03..05 | NPR/AUD, EN/NE, Nepal IRD/CBMS | i18n + tax done; **IRD/CBMS documented, not built** | ◑ |
-| INV, CRM, MULTI | Inventory, loyalty, multi-location | Prisma schema present; features gated off | ○ Phase 2/3 |
+| INV-01,02 | Inventory: stock tracking, auto-deduct on confirm, auto-86 at zero, low-stock alerts, movement audit | `packages/core/inventory.ts`, `/inventory`, `apps/web/.../admin` Inventory tab | ✅ (Growth+) |
+| CRM, MULTI | Loyalty, multi-location | Prisma schema present; features gated off | ○ Phase 2/3 |
 
 ## Backend (BE)
 

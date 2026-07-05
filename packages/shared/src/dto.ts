@@ -121,6 +121,7 @@ export interface PaymentDTO {
   id: string;
   rail: PaymentRail;
   amountMinor: number;
+  tipMinor: number;
   currency: Currency;
   status: PaymentStatus;
   processorToken: string | null;
@@ -142,6 +143,7 @@ export interface OrderDTO {
   taxMinor: number;
   totalMinor: number;
   paidMinor: number;
+  tipMinor: number;
   balanceMinor: number;
   customerName: string | null;
   note: string | null;
@@ -175,6 +177,7 @@ export const zUpsertItem = z.object({
 export const zPaymentRequest = z.object({
   rail: zPaymentRail,
   amountMinor: z.number().int().positive(),
+  tipMinor: z.number().int().nonnegative().optional(), // PAY-06
   tenderedMinor: z.number().int().optional(),
 });
 
@@ -190,6 +193,49 @@ export const zCreateOrderRequest = z.object({
   note: z.string().optional(),
 });
 
+/* ------------------------------- Inventory (INV-01/02) ------------------------------- */
+
+export interface InventoryRowDTO {
+  menuItemId: string;
+  name: string; // localized item name
+  categoryName: string; // localized
+  stockLevel: number;
+  reorderPoint: number;
+  tracked: boolean; // false = no InventoryItem row yet (untracked)
+  low: boolean; // stockLevel <= reorderPoint
+  available: boolean; // the item's 86 flag
+}
+
+export interface StockMovementDTO {
+  id: string;
+  menuItemId: string;
+  name: string;
+  delta: number;
+  reason: string; // ORDER | ADJUST | RESTOCK
+  orderId: string | null;
+  createdAt: string;
+}
+
+export interface InventoryReport {
+  rows: InventoryRowDTO[];
+  lowCount: number;
+  movements: StockMovementDTO[];
+}
+
+// Set an absolute stock level (a physical stock-take).
+export const zSetStockRequest = z.object({
+  menuItemId: z.string().min(1),
+  stockLevel: z.number().int().nonnegative(),
+  reorderPoint: z.number().int().nonnegative().optional(),
+});
+
+// Apply a relative change (restock / wastage). Positive = restock, negative = adjust down.
+export const zAdjustStockRequest = z.object({
+  menuItemId: z.string().min(1),
+  delta: z.number().int(),
+  reason: z.enum(["ADJUST", "RESTOCK"]).optional(),
+});
+
 /* ------------------------------- Reports ------------------------------- */
 
 export interface SalesReport {
@@ -200,6 +246,7 @@ export interface SalesReport {
   grossMinor: number;
   taxMinor: number;
   netMinor: number;
+  tipsMinor: number;
   byRail: { rail: PaymentRail; amountMinor: number; count: number }[];
   byChannel: { channel: Channel; amountMinor: number; count: number }[];
   topItems: { name: string; qty: number; revenueMinor: number }[];

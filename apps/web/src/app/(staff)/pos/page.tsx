@@ -188,17 +188,17 @@ function Pos() {
     toast({ title: "Sent to kitchen", tone: "success" });
   }
 
-  async function payCash(tenderedMinor: number) {
+  async function payCash(tenderedMinor: number, tipMinor: number) {
     if (!loc) return;
     const orderId = uid();
-    const change = tenderedMinor - grandTotalMinor;
+    const change = tenderedMinor - (grandTotalMinor + tipMinor);
     const events = buildBaseEvents(orderId);
     const now = new Date().toISOString();
     events.push({ orderId, type: "ORDER_CONFIRMED", payload: {}, deviceTimestamp: now, idempotencyKey: `${orderId}:confirmed` });
     events.push({
       orderId,
       type: "PAYMENT_CAPTURED",
-      payload: { rail: "CASH", amountMinor: grandTotalMinor, tenderedMinor, changeMinor: change },
+      payload: { rail: "CASH", amountMinor: grandTotalMinor, tipMinor: tipMinor || undefined, tenderedMinor, changeMinor: change },
       deviceTimestamp: now,
       idempotencyKey: `${orderId}:pay`,
     });
@@ -210,7 +210,7 @@ function Pos() {
     toast({ title: change > 0 ? `Paid — change ${(change / 100).toFixed(2)}` : "Paid ✓", tone: "success" });
   }
 
-  async function payCard(rail: PaymentRail) {
+  async function payCard(rail: PaymentRail, tipMinor: number) {
     if (!loc) return;
     // Card/rail requires connectivity (SYNC-03) — create order online, add items, then charge.
     const order = await api.post<{ id: string }>("/orders", { channel: "POS", fulfillment, tableId: tableId ?? undefined });
@@ -230,7 +230,7 @@ function Pos() {
       idempotencyKey: `${order.id}:add:${l.lineId}`,
     }));
     await api.post(`/orders/${order.id}/events`, { events });
-    await api.post(`/orders/${order.id}/pay`, { rail, amountMinor: grandTotalMinor });
+    await api.post(`/orders/${order.id}/pay`, { rail, amountMinor: grandTotalMinor, tipMinor: tipMinor || undefined });
     await api.post(`/orders/${order.id}/status`, { status: "CLOSED" });
     setPaying(false);
     setModItem(null);
@@ -601,6 +601,8 @@ function ModifierSheet({
   );
 }
 
+const TIP_PCTS = [0, 5, 10, 15] as const;
+
 function PaymentModal({
   open,
   currency,
@@ -616,26 +618,89 @@ function PaymentModal({
   totalMinor: number;
   online: boolean;
   rails: PaymentRail[];
-  onCash: (tenderedMinor: number) => void;
-  onCard: (rail: PaymentRail) => void;
+  onCash: (tenderedMinor: number, tipMinor: number) => void;
+  onCard: (rail: PaymentRail, tipMinor: number) => void;
   onClose: () => void;
 }) {
+  // Tip (PAY-06): a percentage preset or a custom amount, added on top of the amount due.
+  const [tipPct, setTipPct] = useState<number | "custom">(0);
+  const [tipCustom, setTipCustom] = useState("");
+  const tipMinor = useMemo(() => {
+    if (tipPct === "custom") return Math.max(0, Math.round(parseFloat(tipCustom || "0") * 100));
+    return Math.round((totalMinor * tipPct) / 100);
+  }, [tipPct, tipCustom, totalMinor]);
+  const dueMinor = totalMinor + tipMinor;
+
   const [tendered, setTendered] = useState((totalMinor / 100).toFixed(2));
   useEffect(() => {
-    if (open) setTendered((totalMinor / 100).toFixed(2));
-  }, [open, totalMinor]);
+    if (open) {
+      setTipPct(0);
+      setTipCustom("");
+    }
+  }, [open]);
+  useEffect(() => {
+    if (open) setTendered((dueMinor / 100).toFixed(2));
+  }, [open, dueMinor]);
 
   const tenderedMinor = Math.round(parseFloat(tendered || "0") * 100);
-  const change = tenderedMinor - totalMinor;
+  const change = tenderedMinor - dueMinor;
   const cardRails = rails.filter((r) => r !== "CASH");
 
   return (
     <Modal open={open} onClose={onClose} title="Take Payment" size="md">
-      <div className="mb-4 flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3">
-        <span className="text-sm font-medium text-muted">Amount due</span>
-        <span className="text-2xl font-bold text-ink">
-          <Money minor={totalMinor} currency={currency} />
-        </span>
+      <div className="mb-4 rounded-xl bg-surface-2 px-4 py-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-muted">Amount due</span>
+          <span className="text-2xl font-bold text-ink">
+            <Money minor={dueMinor} currency={currency} />
+          </span>
+        </div>
+        {tipMinor > 0 && (
+          <div className="mt-1 flex items-center justify-between text-xs text-muted">
+            <span>
+              Incl. tip <Money minor={tipMinor} currency={currency} />
+            </span>
+            <span>
+              Goods <Money minor={totalMinor} currency={currency} />
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="mb-4">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Tip</div>
+        <div className="flex flex-wrap gap-2">
+          {TIP_PCTS.map((p) => (
+            <button
+              key={p}
+              onClick={() => setTipPct(p)}
+              className={`tap rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                tipPct === p ? "border-brand bg-brand text-white" : "border-line bg-surface text-muted hover:border-brand/40 hover:text-ink"
+              }`}
+            >
+              {p === 0 ? "No tip" : `${p}%`}
+            </button>
+          ))}
+          <div className={`flex items-center overflow-hidden rounded-lg border ${tipPct === "custom" ? "border-brand" : "border-line"}`}>
+            <button
+              onClick={() => setTipPct("custom")}
+              className={`tap px-3 py-1.5 text-sm font-semibold transition ${tipPct === "custom" ? "bg-brand text-white" : "bg-surface text-muted hover:text-ink"}`}
+            >
+              Custom
+            </button>
+            {tipPct === "custom" && (
+              <input
+                inputMode="decimal"
+                autoFocus
+                aria-label="Custom tip amount"
+                value={tipCustom}
+                onChange={(e) => setTipCustom(e.target.value.replace(/[^0-9.]/g, ""))}
+                placeholder="0.00"
+                className="w-20 bg-surface px-2 py-1.5 text-right text-sm text-ink focus-visible:outline-none"
+              />
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="rounded-xl border border-line p-4">
@@ -656,7 +721,7 @@ function PaymentModal({
             <div className="font-semibold text-ink">{change >= 0 ? (change / 100).toFixed(2) : "—"}</div>
           </div>
         </div>
-        <Button size="lg" className="mt-3 w-full" disabled={tenderedMinor < totalMinor} onClick={() => onCash(tenderedMinor)}>
+        <Button size="lg" className="mt-3 w-full" disabled={tenderedMinor < dueMinor} onClick={() => onCash(tenderedMinor, tipMinor)}>
           Charge Cash
         </Button>
       </div>
@@ -670,7 +735,7 @@ function PaymentModal({
           </div>
           <div className="grid grid-cols-2 gap-2">
             {cardRails.map((r) => (
-              <Button key={r} variant="secondary" disabled={!online} onClick={() => onCard(r)}>
+              <Button key={r} variant="secondary" disabled={!online} onClick={() => onCard(r, tipMinor)}>
                 {r}
               </Button>
             ))}

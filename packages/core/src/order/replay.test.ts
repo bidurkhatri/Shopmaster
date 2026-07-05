@@ -117,6 +117,22 @@ describe("replayOrder", () => {
     expect(o.status).toBe("CLOSED");
   });
 
+  it("accumulates tips separately from the goods amount (PAY-06)", () => {
+    const o = replayOrder(
+      [
+        created("2026-07-01T00:00:00Z"),
+        add("e1", "l1", 480, 2, "2026-07-01T00:00:01Z"),
+        // Paid 1056 goods + 150 tip; tip must not inflate paidMinor toward the balance.
+        ev({ id: "e2", type: "PAYMENT_CAPTURED", deviceTimestamp: "2026-07-01T00:00:03Z", payload: { rail: "TYRO", amountMinor: 1056, tipMinor: 150 } }),
+        ev({ id: "e3", type: "ORDER_CLOSED", deviceTimestamp: "2026-07-01T00:00:04Z", payload: {} }),
+      ],
+      AU_GST,
+    );
+    expect(o.paidMinor).toBe(1056); // goods only — the bill is settled
+    expect(o.tipMinor).toBe(150); // tip tracked independently for reporting/payout
+    expect(o.payments[0]!.tipMinor).toBe(150);
+  });
+
   it("is idempotent for a re-added line id (no doubling)", () => {
     const o = replayOrder(
       [

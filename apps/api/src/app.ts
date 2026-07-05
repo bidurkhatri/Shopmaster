@@ -9,6 +9,7 @@ import { onboardingRouter } from "./routes/onboarding.js";
 import { orgsRouter } from "./routes/orgs.js";
 import { menuRouter } from "./routes/menu.js";
 import { inventoryRouter } from "./routes/inventory.js";
+import { customersRouter } from "./routes/customers.js";
 import { ordersRouter } from "./routes/orders.js";
 import { publicOrdersRouter } from "./routes/public-orders.js";
 import { syncRouter } from "./routes/sync.js";
@@ -36,6 +37,7 @@ export function createApp() {
   app.use("/api", orgsRouter);
   app.use("/api", menuRouter);
   app.use("/api", inventoryRouter);
+  app.use("/api", customersRouter);
   app.use("/api", ordersRouter);
   app.use("/api", publicOrdersRouter);
   app.use("/api", syncRouter);

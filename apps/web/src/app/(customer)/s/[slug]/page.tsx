@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { StorefrontOrdering, StorefrontSkeleton } from "@/components/StorefrontOrdering";
 import { EmptyState } from "@/components/ui";
 import { IconStore } from "@/components/icons";
-import type { MenuCategoryDTO, OrganizationDTO } from "@shopmaster/shared";
+import { resolveCapabilities, type MenuCategoryDTO, type OrganizationDTO } from "@shopmaster/shared";
 
 export default function StorefrontPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -33,5 +33,6 @@ export default function StorefrontPage() {
     );
   if (!org || !menu) return <StorefrontSkeleton mode="online" />;
 
-  return <StorefrontOrdering org={org} menu={menu} mode="online" />;
+  const loyaltyEnabled = resolveCapabilities(org.tier, org.businessType).features.loyalty;
+  return <StorefrontOrdering org={org} menu={menu} mode="online" loyaltyEnabled={loyaltyEnabled} />;
 }

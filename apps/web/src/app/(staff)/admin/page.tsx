@@ -35,6 +35,7 @@ import {
   IconStore,
   IconPrinter,
   IconBox,
+  IconHeart,
 } from "@/components/icons";
 import { api, API_BASE } from "@/lib/api";
 import { useAuth } from "@/lib/store";
@@ -46,6 +47,7 @@ import type {
   SalesReport,
   OrderStatus,
   InventoryReport,
+  CustomerDTO,
 } from "@shopmaster/shared";
 
 interface Ctx {
@@ -65,6 +67,7 @@ const TABS = [
   { key: "Orders", icon: IconReceipt },
   { key: "Menu", icon: IconMenuList },
   { key: "Inventory", icon: IconBox },
+  { key: "Customers", icon: IconHeart },
   { key: "Tables", icon: IconGrid },
   { key: "Staff", icon: IconUsers },
   { key: "Settings", icon: IconSettings },
@@ -90,6 +93,7 @@ function Admin() {
 
   const visibleTabs = TABS.filter((t) => {
     if (t.key === "Inventory") return capabilities?.features.inventory;
+    if (t.key === "Customers") return capabilities?.features.loyalty;
     if (t.key === "Tables") return capabilities?.features.tables;
     if (t.key === "Staff") return capabilities?.features.staffRoles;
     return true;
@@ -128,6 +132,7 @@ function Admin() {
       {tab === "Orders" && <Orders />}
       {tab === "Menu" && <MenuAdmin />}
       {tab === "Inventory" && <Inventory currency={currency} />}
+      {tab === "Customers" && <Customers currency={currency} />}
       {tab === "Tables" && <Tables />}
       {tab === "Staff" && <Staff />}
       {tab === "Settings" && <Settings />}
@@ -1137,6 +1142,107 @@ function SetStockModal({
       </div>
       <p className="mt-3 text-xs text-muted">Hitting zero auto-86’s the item everywhere; restocking above zero restores it.</p>
     </Modal>
+  );
+}
+
+/* ------------------------------------------------------------------ customers */
+
+function initials(name: string | null, fallback: string) {
+  const src = name?.trim() || fallback;
+  return src
+    .split(/\s+/)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+function Customers({ currency }: { currency: string }) {
+  const [rows, setRows] = useState<CustomerDTO[] | null>(null);
+
+  useEffect(() => {
+    api.get<CustomerDTO[]>("/customers").then(setRows).catch(() => setRows([]));
+  }, []);
+
+  if (rows === null) {
+    return (
+      <Card className="divide-y divide-line">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 p-4">
+            <Skeleton className="h-9 w-9 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+            <Skeleton className="h-5 w-16" />
+          </div>
+        ))}
+      </Card>
+    );
+  }
+
+  if (rows.length === 0) {
+    return (
+      <EmptyState
+        icon={<IconHeart className="h-6 w-6" />}
+        title="No rewards customers yet"
+        description="Customers who opt in to rewards at online checkout appear here with their visits, spend and points."
+      />
+    );
+  }
+
+  const totalPoints = rows.reduce((s, c) => s + c.points, 0);
+  const marketable = rows.filter((c) => c.optInMarketing).length;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3">
+        <Stat label="Members" value={String(rows.length)} />
+        <Stat label="Points issued" value={String(totalPoints)} />
+        <Stat label="Marketing opt-in" value={String(marketable)} />
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="border-b border-line px-4 py-3">
+          <h3 className="text-sm font-semibold text-muted">Rewards members</h3>
+        </div>
+        <div className="divide-y divide-line">
+          {rows.map((c) => (
+            <div key={c.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/15 text-xs font-bold text-brand">
+                {initials(c.name, c.contactMethod)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-ink">{c.name ?? "Guest"}</span>
+                  {c.optInMarketing && <Badge tone="green">Marketing</Badge>}
+                </div>
+                <div className="mt-0.5 truncate text-xs text-muted">
+                  {c.contactMethod}
+                  {c.lastVisit && <span> · last visit {timeOf(c.lastVisit)}</span>}
+                </div>
+              </div>
+              <div className="flex items-center gap-5 text-right text-sm">
+                <div>
+                  <div className="font-semibold text-ink tabular-nums">{c.visits}</div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted">visits</div>
+                </div>
+                <div>
+                  <div className="font-semibold text-ink tabular-nums">
+                    <Money minor={c.totalSpendMinor} currency={currency} />
+                  </div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted">spend</div>
+                </div>
+                <div>
+                  <div className="font-semibold text-brand tabular-nums">{c.points}</div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted">points</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
   );
 }
 

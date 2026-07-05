@@ -243,7 +243,15 @@ async function seedRestaurant() {
     ],
   });
 
-  // Historical orders across the last 6 days for the reporting dashboard.
+  // Opt-in rewards members (CRM-01) — repeat customers who joined loyalty at online checkout.
+  const [jordan, sam, riya] = await Promise.all([
+    prisma.customerProfile.create({ data: { organizationId: org.id, contactMethod: "+61 400 111 222", name: "Jordan Lee", optInMarketing: true } }),
+    prisma.customerProfile.create({ data: { organizationId: org.id, contactMethod: "+61 400 333 444", name: "Sam Nguyen", optInMarketing: true } }),
+    prisma.customerProfile.create({ data: { organizationId: org.id, contactMethod: "+61 400 555 666", name: "Riya Gurung", optInMarketing: false } }),
+  ]);
+
+  // Historical orders across the last 6 days for the reporting dashboard. `cust` links a rewards
+  // member so the loyalty view has real visits/spend/points.
   const menu = { flatWhite, avoToast, bigBreak, burger, fishChips, lager };
   const plan: Array<{
     channel: string;
@@ -252,14 +260,15 @@ async function seedRestaurant() {
     hour: number;
     lines: Array<{ item: (typeof menu)[keyof typeof menu]; qty: number }>;
     rail: string;
+    customerId?: string;
   }> = [
     { channel: "POS", fulfillment: "DINE_IN", day: 0, hour: 8, lines: [{ item: flatWhite, qty: 2 }, { item: avoToast, qty: 1 }], rail: "TYRO" },
-    { channel: "QR", fulfillment: "DINE_IN", day: 0, hour: 12, lines: [{ item: burger, qty: 1 }, { item: lager, qty: 1 }], rail: "TYRO" },
-    { channel: "ONLINE", fulfillment: "PICKUP", day: 1, hour: 13, lines: [{ item: fishChips, qty: 2 }], rail: "TYRO" },
+    { channel: "QR", fulfillment: "DINE_IN", day: 0, hour: 12, lines: [{ item: burger, qty: 1 }, { item: lager, qty: 1 }], rail: "TYRO", customerId: jordan.id },
+    { channel: "ONLINE", fulfillment: "PICKUP", day: 1, hour: 13, lines: [{ item: fishChips, qty: 2 }], rail: "TYRO", customerId: jordan.id },
     { channel: "POS", fulfillment: "DINE_IN", day: 1, hour: 19, lines: [{ item: bigBreak, qty: 1 }, { item: flatWhite, qty: 1 }], rail: "CASH" },
     { channel: "KIOSK", fulfillment: "PICKUP", day: 2, hour: 9, lines: [{ item: flatWhite, qty: 1 }, { item: avoToast, qty: 2 }], rail: "TYRO" },
-    { channel: "QR", fulfillment: "DINE_IN", day: 3, hour: 20, lines: [{ item: burger, qty: 2 }, { item: lager, qty: 3 }], rail: "TYRO" },
-    { channel: "ONLINE", fulfillment: "DELIVERY", day: 4, hour: 18, lines: [{ item: fishChips, qty: 1 }, { item: burger, qty: 1 }], rail: "TYRO" },
+    { channel: "QR", fulfillment: "DINE_IN", day: 3, hour: 20, lines: [{ item: burger, qty: 2 }, { item: lager, qty: 3 }], rail: "TYRO", customerId: sam.id },
+    { channel: "ONLINE", fulfillment: "DELIVERY", day: 4, hour: 18, lines: [{ item: fishChips, qty: 1 }, { item: burger, qty: 1 }], rail: "TYRO", customerId: riya.id },
     { channel: "POS", fulfillment: "DINE_IN", day: 5, hour: 12, lines: [{ item: bigBreak, qty: 2 }], rail: "CASH" },
   ];
   for (const p of plan) {
@@ -271,6 +280,7 @@ async function seedRestaurant() {
       when: daysAgo(p.day, p.hour),
       lines: p.lines,
       rail: p.rail,
+      customerId: p.customerId,
     });
   }
 
@@ -285,6 +295,7 @@ async function createClosedOrder(opts: {
   when: Date;
   lines: Array<{ item: { id: string; name: string; priceMinor: number; station: string }; qty: number }>;
   rail: string;
+  customerId?: string;
 }) {
   const { org, loc, when } = opts;
   let subtotal = 0;
@@ -312,6 +323,7 @@ async function createClosedOrder(opts: {
       fulfillment: opts.fulfillment,
       status: "CLOSED",
       currency: org.currency,
+      customerId: opts.customerId ?? null,
       subtotalMinor: subtotal,
       taxMinor,
       totalMinor,

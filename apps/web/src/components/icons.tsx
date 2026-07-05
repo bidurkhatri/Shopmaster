@@ -31,6 +31,7 @@ export const IconEdit = (p: P) => <S {...p}><path d="M12 20h9M16.5 3.5a2.1 2.1 0
 export const IconClock = (p: P) => <S {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></S>;
 export const IconPrinter = (p: P) => <S {...p}><path d="M6 9V3h12v6M6 18H4v-5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5h-2M8 14h8v7H8z" /></S>;
 export const IconBox = (p: P) => <S {...p}><path d="M21 8 12 3 3 8v8l9 5 9-5V8ZM3 8l9 5 9-5M12 13v8" /></S>;
+export const IconHeart = (p: P) => <S {...p}><path d="M12 21s-7.5-4.6-10-9.3C.7 8.9 2.3 5.5 5.6 5.5c1.9 0 3.3 1.1 4.4 2.5C11.1 6.6 12.5 5.5 14.4 5.5c3.3 0 4.9 3.4 3.6 6.2C19.5 16.4 12 21 12 21Z" /></S>;
 export const IconArrowRight = (p: P) => <S {...p}><path d="M5 12h14M13 6l6 6-6 6" /></S>;
 export const IconChevronDown = (p: P) => <S {...p}><path d="m6 9 6 6 6-6" /></S>;
 export const IconSearch = (p: P) => <S {...p}><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></S>;

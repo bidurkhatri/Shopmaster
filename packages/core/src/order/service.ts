@@ -5,12 +5,13 @@
  * events so POS, QR, kiosk and online behave identically and offline batches merge deterministically.
  */
 import { prisma, type Prisma } from "@shopmaster/db";
-import type { OrderEventType, PaymentRail, OrderDTO, Channel, Fulfillment, OrderStatus } from "@shopmaster/shared";
+import { resolveCapabilities, type OrderEventType, type PaymentRail, type OrderDTO, type Channel, type Fulfillment, type OrderStatus, type Tier, type BusinessType } from "@shopmaster/shared";
 import { replayOrder, type ReplayEvent, type MaterializedOrder } from "./replay.js";
 import type { TaxConfig } from "../pricing-tax.js";
 import { charge, getPaymentAdapter } from "../payments/index.js";
 import { emitDomainEvent } from "../events/emitter.js";
 import { assertTenant, type TenantContext } from "../tenancy.js";
+import { upsertCustomerForOrder } from "../crm.js";
 
 export interface IngestEvent {
   orderId: string;
@@ -167,6 +168,7 @@ export async function createOrder(
     customerPhone?: string;
     deliveryAddress?: string;
     note?: string;
+    loyaltyOptIn?: boolean; // CRM-01: opt-in to rewards, keyed by customerPhone
   },
 ): Promise<string> {
   let locationId = input.locationId;
@@ -226,6 +228,19 @@ export async function createOrder(
       deviceId: ctx.deviceId,
     },
   ]);
+
+  // Opt-in loyalty (CRM-01): attach this order to a rewards profile keyed by the phone given —
+  // but only if the merchant's tier actually includes loyalty (authoritative capability guard).
+  const org = location!.organization;
+  const loyaltyEnabled = resolveCapabilities(org.tier as Tier, org.businessType as BusinessType).features.loyalty;
+  if (loyaltyEnabled && input.loyaltyOptIn && input.customerPhone) {
+    await upsertCustomerForOrder(ctx, {
+      orderId: order.id,
+      contactMethod: input.customerPhone,
+      name: input.customerName,
+      optInMarketing: true,
+    });
+  }
 
   emitDomainEvent({ type: "order.created", orderId: order.id, organizationId: ctx.organizationId });
   return order.id;

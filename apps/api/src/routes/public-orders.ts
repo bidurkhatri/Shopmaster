@@ -26,6 +26,7 @@ const zPublicCreate = z.object({
   customerPhone: z.string().optional(),
   deliveryAddress: z.string().optional(),
   note: z.string().optional(),
+  loyaltyOptIn: z.boolean().optional(), // CRM-01: join rewards with the phone provided
 });
 
 function publicCtx(organizationId: string): TenantContext {
@@ -71,6 +72,7 @@ publicOrdersRouter.post(
       customerPhone: input.customerPhone,
       deliveryAddress: input.deliveryAddress,
       note: input.note,
+      loyaltyOptIn: input.loyaltyOptIn,
     });
     res.status(201).json(await getOrderDTO(orderId));
   }),

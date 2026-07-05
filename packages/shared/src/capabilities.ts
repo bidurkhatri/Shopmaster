@@ -41,13 +41,14 @@ export function resolveCapabilities(tier: Tier, businessType: BusinessType): Cap
     onlineOrdering: true, // branded online ordering is core MVP scope (PRD §6)
     qrOrdering: true,
     inventory: isGrowthPlus, // INV-01/02 — stock tracking + auto-86, for Growth/Enterprise
-    loyalty: false, // Phase 2/3
+    loyalty: isGrowthPlus, // CRM-01/02 — opt-in customer profiles + loyalty, for Growth/Enterprise
     multiLocation: tier === "ENTERPRISE",
     staffRoles: isGrowthPlus,
   };
 
   const adminNav = ["dashboard", "menu", "orders"];
   if (features.inventory) adminNav.push("inventory");
+  if (features.loyalty) adminNav.push("customers");
   if (features.tables) adminNav.push("tables");
   if (features.staffRoles) adminNav.push("staff");
   adminNav.push("devices", "settings");

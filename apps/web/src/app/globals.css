@@ -5,6 +5,35 @@
 :root {
   --brand: #0f766e;
   --brand-accent: #14b8a6;
+
+  /* Neutral surface tokens (light). Dark overrides below. */
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-muted: #64748b;
+}
+
+:root[data-theme="dark"],
+.dark {
+  --bg: #0b1120;
+  --surface: #111827;
+  --surface-2: #0f172a;
+  --border: #1f2937;
+  --text: #e5e7eb;
+  --text-muted: #94a3b8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1120;
+    --surface: #111827;
+    --surface-2: #0f172a;
+    --border: #1f2937;
+    --text: #e5e7eb;
+    --text-muted: #94a3b8;
+  }
 }
 
 html,
@@ -13,10 +42,63 @@ body {
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 /* Big, thumb-friendly touch targets for POS/kiosk on tablets (HW-02 / KIOSK-02). */
 .tap {
-  @apply select-none transition active:scale-[0.98];
+  @apply select-none transition-all duration-150 active:scale-[0.97];
+}
+
+/* Subtle, consistent focus ring. */
+*:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Refined scrollbars. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 35%, transparent);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-muted) 55%, transparent);
+  background-clip: padding-box;
+}
+
+/* Animations for modals / toasts / entrances. */
+@keyframes sm-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes sm-slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes sm-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-fade { animation: sm-fade-in 0.18s ease-out; }
+.animate-rise { animation: sm-slide-up 0.22s cubic-bezier(0.16, 1, 0.3, 1); }
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 25%,
+    color-mix(in srgb, var(--surface-2) 50%, var(--border)) 37%,
+    var(--surface-2) 63%
+  );
+  background-size: 200% 100%;
+  animation: sm-shimmer 1.4s ease-in-out infinite;
 }

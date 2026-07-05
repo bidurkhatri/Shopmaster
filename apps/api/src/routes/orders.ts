@@ -3,6 +3,7 @@ import {
   createOrder,
   ingestEvents,
   payOrder,
+  refundPayment,
   setOrderStatus,
   getOrderDTO,
   listOrders,
@@ -120,5 +121,18 @@ ordersRouter.post(
     if (status === "OPEN") throw new HttpError(400, "Cannot set status back to OPEN");
     await setOrderStatus(ctx, req.params.id, status);
     res.json({ order: await getOrderDTO(req.params.id) });
+  }),
+);
+
+ordersRouter.post(
+  "/orders/:id/refund",
+  requireAuth,
+  requirePermission("order.refund"),
+  h(async (req, res) => {
+    const ctx = requireCtx(req);
+    await getOrderScoped(ctx.organizationId, req.params.id);
+    const { paymentId } = z.object({ paymentId: z.string().min(1) }).parse(req.body);
+    const result = await refundPayment(ctx, req.params.id, paymentId);
+    res.json({ order: await getOrderDTO(req.params.id), payment: result.payment, result: result.result });
   }),
 );

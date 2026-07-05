@@ -8,7 +8,7 @@ import { prisma, type Prisma } from "@shopmaster/db";
 import type { OrderEventType, PaymentRail, OrderDTO, Channel, Fulfillment, OrderStatus } from "@shopmaster/shared";
 import { replayOrder, type ReplayEvent, type MaterializedOrder } from "./replay.js";
 import type { TaxConfig } from "../pricing-tax.js";
-import { charge } from "../payments/index.js";
+import { charge, getPaymentAdapter } from "../payments/index.js";
 import { emitDomainEvent } from "../events/emitter.js";
 import { assertTenant, type TenantContext } from "../tenancy.js";
 
@@ -277,6 +277,35 @@ export async function payOrder(
   }
 
   return { payment, result };
+}
+
+/** Refund a captured payment (POS-11) via its rail adapter; audited, recomputes the order's paid total. */
+export async function refundPayment(ctx: TenantContext, orderId: string, paymentId: string) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  assertTenant(ctx, order);
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
+  if (!payment || payment.orderId !== orderId) throw new Error("Payment not found");
+  if (payment.status !== "CAPTURED") throw new Error("Only captured payments can be refunded");
+
+  const adapter = getPaymentAdapter(payment.rail as PaymentRail);
+  const result = await adapter.refund(payment.processorToken ?? "", payment.amountMinor);
+
+  await prisma.payment.update({ where: { id: paymentId }, data: { status: "REFUNDED" } });
+  const captured = await prisma.payment.aggregate({ where: { orderId, status: "CAPTURED" }, _sum: { amountMinor: true } });
+  await prisma.order.update({ where: { id: orderId }, data: { paidMinor: captured._sum.amountMinor ?? 0 } });
+
+  await prisma.auditLogEntry.create({
+    data: {
+      organizationId: order!.organizationId,
+      actorId: ctx.staffId ?? null,
+      action: "PAYMENT_REFUNDED",
+      target: `payment:${paymentId}`,
+      before: JSON.stringify({ status: "CAPTURED", amountMinor: payment.amountMinor, rail: payment.rail }),
+      after: JSON.stringify({ status: "REFUNDED" }),
+    },
+  });
+
+  return { payment: await prisma.payment.findUnique({ where: { id: paymentId } }), result };
 }
 
 const STATUS_EVENT: Record<"CONFIRMED" | "READY" | "CLOSED" | "VOID", OrderEventType> = {

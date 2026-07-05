@@ -8,13 +8,16 @@ import { authRouter } from "./routes/auth.js";
 import { onboardingRouter } from "./routes/onboarding.js";
 import { orgsRouter } from "./routes/orgs.js";
 import { menuRouter } from "./routes/menu.js";
+import { inventoryRouter } from "./routes/inventory.js";
 import { ordersRouter } from "./routes/orders.js";
 import { publicOrdersRouter } from "./routes/public-orders.js";
 import { syncRouter } from "./routes/sync.js";
 import { reportsRouter } from "./routes/reports.js";
 import { contextRouter } from "./routes/context.js";
+import { registerInventorySubscriber } from "@shopmaster/core";
 
 export function createApp() {
+  registerInventorySubscriber(); // wire stock auto-deduction to the order lifecycle (BE-03 / INV-01)
   const app = express();
   app.use(securityHeaders); // baseline security response headers (SECURITY.md / PLAT-14)
   app.use(cors());
@@ -32,6 +35,7 @@ export function createApp() {
   app.use("/api", onboardingRouter);
   app.use("/api", orgsRouter);
   app.use("/api", menuRouter);
+  app.use("/api", inventoryRouter);
   app.use("/api", ordersRouter);
   app.use("/api", publicOrdersRouter);
   app.use("/api", syncRouter);

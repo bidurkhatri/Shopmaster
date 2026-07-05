@@ -42,6 +42,7 @@ reportsRouter.get(
       ["Gross", formatMoney(report.grossMinor, report.currency)],
       ["Tax", formatMoney(report.taxMinor, report.currency)],
       ["Net", formatMoney(report.netMinor, report.currency)],
+      ["Tips", formatMoney(report.tipsMinor, report.currency)],
       [],
       ["Payment rail", "Amount", "Count"],
       ...report.byRail.map((r) => [r.rail, formatMoney(r.amountMinor, report.currency), String(r.count)]),

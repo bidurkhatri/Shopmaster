@@ -43,6 +43,7 @@ export interface MaterializedPayment {
   paymentId?: string;
   rail: string;
   amountMinor: number;
+  tipMinor?: number;
   tenderedMinor?: number;
   changeMinor?: number;
   processorToken?: string;
@@ -71,6 +72,7 @@ export interface MaterializedOrder {
   items: MaterializedItem[];
   payments: MaterializedPayment[];
   paidMinor: number;
+  tipMinor: number;
   totals: Totals;
   conflicts: ConflictRecord[];
 }
@@ -109,6 +111,7 @@ export function replayOrder(events: ReplayEvent[], tax: TaxConfig): Materialized
     items: [],
     payments,
     paidMinor: 0,
+    tipMinor: 0,
     totals: { subtotalMinor: 0, taxMinor: 0, totalMinor: 0 },
     conflicts,
   };
@@ -204,6 +207,7 @@ export function replayOrder(events: ReplayEvent[], tax: TaxConfig): Materialized
           paymentId: p!.paymentId as string | undefined,
           rail: p!.rail as string,
           amountMinor: p!.amountMinor as number,
+          tipMinor: p!.tipMinor as number | undefined,
           tenderedMinor: p!.tenderedMinor as number | undefined,
           changeMinor: p!.changeMinor as number | undefined,
           processorToken: p!.processorToken as string | undefined,
@@ -243,6 +247,7 @@ export function replayOrder(events: ReplayEvent[], tax: TaxConfig): Materialized
   state.paidMinor = payments
     .filter((pm) => pm.rail)
     .reduce((s, pm) => s + pm.amountMinor, 0);
+  state.tipMinor = payments.reduce((s, pm) => s + (pm.tipMinor ?? 0), 0);
 
   return state;
 }

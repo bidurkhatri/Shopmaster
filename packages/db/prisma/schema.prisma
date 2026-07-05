@@ -202,6 +202,7 @@ model Order {
   taxMinor        Int       @default(0)
   totalMinor      Int       @default(0)
   paidMinor       Int       @default(0)
+  tipMinor        Int       @default(0)
   customerId      String?
   customerName    String?
   customerPhone   String?
@@ -250,6 +251,7 @@ model Payment {
   orderId        String
   rail           String // CASH | FONEPAY | ESEWA | KHALTI | TYRO
   amountMinor    Int
+  tipMinor       Int      @default(0)
   currency       String
   status         String   @default("PENDING") // PENDING | AUTHORIZED | CAPTURED | FAILED | REFUNDED
   processorToken String?
@@ -309,4 +311,18 @@ model InventoryItem {
   menuItem     MenuItem     @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
+}
+
+/// Audit of stock changes (INV): auto-deductions on orders and manual adjustments.
+model StockMovement {
+  id             String   @id @default(cuid())
+  organizationId String
+  menuItemId     String
+  delta          Int // negative = sold/deducted, positive = restock
+  reason         String // ORDER | ADJUST | RESTOCK
+  orderId        String?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([menuItemId])
 }

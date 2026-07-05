@@ -26,6 +26,7 @@ import {
   IconUsers,
   IconSettings,
   IconPlus,
+  IconMinus,
   IconTrash,
   IconEdit,
   IconClock,
@@ -33,6 +34,7 @@ import {
   IconCart,
   IconStore,
   IconPrinter,
+  IconBox,
 } from "@/components/icons";
 import { api, API_BASE } from "@/lib/api";
 import { useAuth } from "@/lib/store";
@@ -43,6 +45,7 @@ import type {
   OrderDTO,
   SalesReport,
   OrderStatus,
+  InventoryReport,
 } from "@shopmaster/shared";
 
 interface Ctx {
@@ -61,6 +64,7 @@ const TABS = [
   { key: "Dashboard", icon: IconChart },
   { key: "Orders", icon: IconReceipt },
   { key: "Menu", icon: IconMenuList },
+  { key: "Inventory", icon: IconBox },
   { key: "Tables", icon: IconGrid },
   { key: "Staff", icon: IconUsers },
   { key: "Settings", icon: IconSettings },
@@ -85,6 +89,7 @@ function Admin() {
   const currency = organization?.currency ?? "AUD";
 
   const visibleTabs = TABS.filter((t) => {
+    if (t.key === "Inventory") return capabilities?.features.inventory;
     if (t.key === "Tables") return capabilities?.features.tables;
     if (t.key === "Staff") return capabilities?.features.staffRoles;
     return true;
@@ -122,6 +127,7 @@ function Admin() {
       {tab === "Dashboard" && <Dashboard currency={currency} />}
       {tab === "Orders" && <Orders />}
       {tab === "Menu" && <MenuAdmin />}
+      {tab === "Inventory" && <Inventory currency={currency} />}
       {tab === "Tables" && <Tables />}
       {tab === "Staff" && <Staff />}
       {tab === "Settings" && <Settings />}
@@ -162,11 +168,12 @@ function Dashboard({ currency }: { currency: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className={`grid grid-cols-2 gap-3 ${r.tipsMinor > 0 ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
         <Stat label="Orders" value={String(r.orderCount)} />
         <Stat label="Gross" value={<Money minor={r.grossMinor} currency={currency} />} />
         <Stat label="Tax" value={<Money minor={r.taxMinor} currency={currency} />} />
         <Stat label="Net" value={<Money minor={r.netMinor} currency={currency} />} />
+        {r.tipsMinor > 0 && <Stat label="Tips" value={<Money minor={r.tipsMinor} currency={currency} />} />}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -465,6 +472,7 @@ function Orders() {
                 <TotalRow k="Subtotal" v={<Money minor={open.subtotalMinor} currency={open.currency} />} />
                 <TotalRow k="Tax" v={<Money minor={open.taxMinor} currency={open.currency} />} />
                 <TotalRow k="Total" v={<Money minor={open.totalMinor} currency={open.currency} />} strong />
+                {open.tipMinor > 0 && <TotalRow k="Tip" v={<Money minor={open.tipMinor} currency={open.currency} />} />}
                 <TotalRow k="Paid" v={<Money minor={open.paidMinor} currency={open.currency} />} />
                 {open.balanceMinor > 0 && <TotalRow k="Balance" v={<Money minor={open.balanceMinor} currency={open.currency} />} />}
               </dl>
@@ -907,6 +915,227 @@ function ItemEditModal({
           </div>
         </div>
       </div>
+    </Modal>
+  );
+}
+
+/* ------------------------------------------------------------------ inventory */
+
+function reasonTone(reason: string): "slate" | "green" | "amber" | "rose" {
+  if (reason === "ORDER") return "amber";
+  if (reason === "RESTOCK") return "green";
+  return "slate";
+}
+
+function Inventory({ currency }: { currency: string }) {
+  const toast = useToast();
+  const [data, setData] = useState<InventoryReport | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [editing, setEditing] = useState<InventoryReport["rows"][number] | null>(null);
+
+  const load = () => api.get<InventoryReport>("/inventory").then(setData).catch(() => setData({ rows: [], lowCount: 0, movements: [] }));
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function adjust(menuItemId: string, delta: number) {
+    setBusy(`${menuItemId}:${delta > 0 ? "up" : "down"}`);
+    try {
+      await api.post("/inventory/adjust", { menuItemId, delta });
+      await load();
+    } catch (e) {
+      toast({ title: errMsg(e), tone: "error" });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (data === null) {
+    return (
+      <Card className="divide-y divide-line">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 p-4">
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+            <Skeleton className="h-8 w-24" />
+          </div>
+        ))}
+      </Card>
+    );
+  }
+
+  const tracked = data.rows.filter((r) => r.tracked);
+  const untracked = data.rows.filter((r) => !r.tracked);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Stat label="Tracked items" value={String(tracked.length)} />
+        <Stat label="Low on stock" value={String(data.lowCount)} hint={data.lowCount > 0 ? "Reorder soon" : "All healthy"} />
+        <Stat label="Out of stock" value={String(tracked.filter((r) => r.stockLevel === 0).length)} />
+      </div>
+
+      {data.lowCount > 0 && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-2.5 text-sm font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+          <IconBox className="h-4 w-4" />
+          {data.lowCount} item{data.lowCount === 1 ? "" : "s"} at or below the reorder point.
+        </div>
+      )}
+
+      <Card className="overflow-hidden">
+        <div className="border-b border-line px-4 py-3">
+          <h3 className="text-sm font-semibold text-muted">Stock levels</h3>
+        </div>
+        {data.rows.length === 0 ? (
+          <EmptyState icon={<IconBox className="h-6 w-6" />} title="Nothing to track yet" description="Add menu items, then set stock levels here to enable auto-86 and low-stock alerts." />
+        ) : (
+          <div className="divide-y divide-line">
+            {data.rows.map((r) => (
+              <div key={r.menuItemId} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`font-medium ${r.available ? "text-ink" : "text-muted line-through"}`}>{r.name}</span>
+                    {r.tracked && r.stockLevel === 0 && <Badge tone="rose">Out</Badge>}
+                    {r.tracked && r.low && r.stockLevel > 0 && <Badge tone="amber">Low</Badge>}
+                    {!r.available && <Badge tone="slate">86</Badge>}
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted">
+                    {r.categoryName}
+                    {r.tracked && <span> · reorder at {r.reorderPoint}</span>}
+                  </div>
+                </div>
+
+                {r.tracked ? (
+                  <>
+                    <div className="flex items-center gap-1.5">
+                      <IconButton
+                        label="Decrease stock"
+                        icon={<IconMinus className="h-4 w-4" />}
+                        disabled={!!busy || r.stockLevel === 0}
+                        onClick={() => adjust(r.menuItemId, -1)}
+                      />
+                      <span className={`w-10 text-center text-lg font-bold tabular-nums ${r.stockLevel === 0 ? "text-rose-500" : r.low ? "text-amber-600 dark:text-amber-400" : "text-ink"}`}>
+                        {r.stockLevel}
+                      </span>
+                      <IconButton
+                        label="Increase stock"
+                        icon={<IconPlus className="h-4 w-4" />}
+                        disabled={!!busy}
+                        onClick={() => adjust(r.menuItemId, 1)}
+                      />
+                    </div>
+                    <Button size="sm" variant="secondary" onClick={() => setEditing(r)}>
+                      Set
+                    </Button>
+                  </>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={() => setEditing(r)}>
+                    Track stock
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-5">
+        <h3 className="mb-3 text-sm font-semibold text-muted">Recent movements</h3>
+        {data.movements.length === 0 ? (
+          <div className="py-4 text-center text-sm text-muted">No stock movements yet.</div>
+        ) : (
+          <div className="divide-y divide-line">
+            {data.movements.map((m) => (
+              <div key={m.id} className="flex items-center gap-3 py-2 text-sm">
+                <Badge tone={reasonTone(m.reason)}>{m.reason}</Badge>
+                <span className="min-w-0 flex-1 truncate text-ink">{m.name}</span>
+                <span className={`font-semibold tabular-nums ${m.delta < 0 ? "text-rose-500" : "text-emerald-600 dark:text-emerald-400"}`}>
+                  {m.delta > 0 ? "+" : ""}
+                  {m.delta}
+                </span>
+                <span className="w-28 text-right text-xs text-muted">{timeOf(m.createdAt)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {editing && (
+        <SetStockModal
+          key={editing.menuItemId}
+          row={editing}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            await load();
+            setEditing(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function SetStockModal({
+  row,
+  onClose,
+  onSaved,
+}: {
+  row: InventoryReport["rows"][number];
+  onClose: () => void;
+  onSaved: () => Promise<void> | void;
+}) {
+  const toast = useToast();
+  const [stockLevel, setStockLevel] = useState(String(row.stockLevel));
+  const [reorderPoint, setReorderPoint] = useState(String(row.reorderPoint));
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    const stock = parseInt(stockLevel, 10);
+    const reorder = parseInt(reorderPoint, 10);
+    if (Number.isNaN(stock) || stock < 0 || Number.isNaN(reorder) || reorder < 0) {
+      toast({ title: "Enter valid, non-negative numbers", tone: "error" });
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.post("/inventory/set", { menuItemId: row.menuItemId, stockLevel: stock, reorderPoint: reorder });
+      toast({ title: "Stock updated", tone: "success" });
+      await onSaved();
+    } catch (e) {
+      toast({ title: errMsg(e), tone: "error" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title={`Stock — ${row.name}`}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button loading={saving} onClick={save}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="On hand" hint="Set after a stock-take">
+          <Input inputMode="numeric" value={stockLevel} onChange={(e) => setStockLevel(e.target.value)} />
+        </Field>
+        <Field label="Reorder at" hint="Low-stock alert level">
+          <Input inputMode="numeric" value={reorderPoint} onChange={(e) => setReorderPoint(e.target.value)} />
+        </Field>
+      </div>
+      <p className="mt-3 text-xs text-muted">Hitting zero auto-86’s the item everywhere; restocking above zero restores it.</p>
     </Modal>
   );
 }

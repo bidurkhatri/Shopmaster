@@ -61,6 +61,13 @@ export async function ingestEvents(
   for (const oid of orderIds) {
     const state = await rebuildOrder(oid);
     conflicts += state.conflicts.length;
+
+    // Emit lifecycle events from whichever path fed the log — POS status change, or a kiosk/QR
+    // sync batch that carries ORDER_CONFIRMED/ORDER_CLOSED directly (BE-03). Subscribers
+    // (inventory, reporting) are idempotent, so a duplicate emit is harmless.
+    const types = new Set(events.filter((e) => e.orderId === oid).map((e) => e.type));
+    if (types.has("ORDER_CONFIRMED")) emitDomainEvent({ type: "order.confirmed", orderId: oid, organizationId: ctx.organizationId });
+    if (types.has("ORDER_CLOSED")) emitDomainEvent({ type: "order.closed", orderId: oid, organizationId: ctx.organizationId });
   }
   return { inserted, duplicates, conflicts, orderIds };
 }
@@ -123,6 +130,7 @@ export async function rebuildOrder(orderId: string): Promise<MaterializedOrder> 
         taxMinor: state.totals.taxMinor,
         totalMinor: state.totals.totalMinor,
         paidMinor: state.paidMinor,
+        tipMinor: state.tipMinor,
         closedAt: state.status === "CLOSED" ? (order.closedAt ?? new Date()) : order.closedAt,
       },
     });
@@ -226,14 +234,17 @@ export async function createOrder(
 export async function payOrder(
   ctx: TenantContext,
   orderId: string,
-  req: { rail: PaymentRail; amountMinor: number; tenderedMinor?: number },
+  req: { rail: PaymentRail; amountMinor: number; tipMinor?: number; tenderedMinor?: number },
 ) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   assertTenant(ctx, order);
 
+  const tipMinor = req.tipMinor ?? 0;
+  // The tender covers goods + tip (PAY-06); cash change is computed against the combined total.
+  const chargeMinor = req.amountMinor + tipMinor;
   const result = await charge({
     orderId,
-    amountMinor: req.amountMinor,
+    amountMinor: chargeMinor,
     currency: order!.currency,
     rail: req.rail,
     tenderedMinor: req.tenderedMinor,
@@ -246,6 +257,7 @@ export async function payOrder(
       orderId,
       rail: req.rail,
       amountMinor: req.amountMinor,
+      tipMinor,
       currency: order!.currency,
       status,
       processorToken: result.processorToken ?? null,
@@ -263,6 +275,7 @@ export async function payOrder(
           paymentId: payment.id,
           rail: req.rail,
           amountMinor: req.amountMinor,
+          tipMinor: tipMinor || undefined,
           tenderedMinor: req.tenderedMinor,
           changeMinor: result.changeMinor,
           processorToken: result.processorToken,
@@ -318,6 +331,7 @@ const STATUS_EVENT: Record<"CONFIRMED" | "READY" | "CLOSED" | "VOID", OrderEvent
 export async function setOrderStatus(ctx: TenantContext, orderId: string, status: "CONFIRMED" | "READY" | "CLOSED" | "VOID") {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   assertTenant(ctx, order);
+  // ingestEvents emits order.confirmed / order.closed from the event types, covering every path.
   await ingestEvents(ctx, [
     {
       orderId,
@@ -329,8 +343,6 @@ export async function setOrderStatus(ctx: TenantContext, orderId: string, status
       deviceId: ctx.deviceId,
     },
   ]);
-  if (status === "CONFIRMED") emitDomainEvent({ type: "order.confirmed", orderId, organizationId: order!.organizationId });
-  if (status === "CLOSED") emitDomainEvent({ type: "order.closed", orderId, organizationId: order!.organizationId });
 }
 
 type OrderWithRels = Prisma.OrderGetPayload<{ include: { items: true; payments: true; table: true } }>;
@@ -350,6 +362,7 @@ function toOrderDTO(order: OrderWithRels): OrderDTO {
     taxMinor: order.taxMinor,
     totalMinor: order.totalMinor,
     paidMinor: order.paidMinor,
+    tipMinor: order.tipMinor,
     balanceMinor: order.totalMinor - order.paidMinor,
     customerName: order.customerName,
     note: order.note,
@@ -371,6 +384,7 @@ function toOrderDTO(order: OrderWithRels): OrderDTO {
       id: p.id,
       rail: p.rail as PaymentRail,
       amountMinor: p.amountMinor,
+      tipMinor: p.tipMinor,
       currency: p.currency as OrderDTO["currency"],
       status: p.status as OrderDTO["payments"][number]["status"],
       processorToken: p.processorToken,

@@ -51,6 +51,17 @@ Money is always an integer in the currency's **minor units** (cents/paisa).
 | POST | `/menu/items` | `{ categoryId, nameEn, nameNe?, priceMinor, station?, … }` | item |
 | POST | `/menu/items/:id/availability` | `{ available }` | item (one-tap 86, MENU-04) |
 
+## Inventory (auth — `menu.manage`, Growth+ — INV-01/02)
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET | `/inventory?locale=` | — | `InventoryReport` (per-item stock, low-stock flags, recent movements) |
+| POST | `/inventory/set` | `{ menuItemId, stockLevel, reorderPoint? }` | `InventoryItem` (stock-take; auto-86/un-86) |
+| POST | `/inventory/adjust` | `{ menuItemId, delta, reason? }` | `InventoryItem` (restock / write-off) |
+
+Confirming an order auto-deducts sold quantities (idempotent per order, via the domain event bus);
+hitting zero auto-86's the item across every channel, restocking above zero restores it.
+
 ## Orders (auth staff)
 
 | Method | Path | Perm | Body | Returns |
@@ -60,7 +71,7 @@ Money is always an integer in the currency's **minor units** (cents/paisa).
 | GET | `/kitchen` | `kitchen.view` | — | `OrderDTO[]` (KDS: CONFIRMED/READY) |
 | GET | `/orders/:id` | — | — | `OrderDTO` (404 cross-tenant — GAP-05) |
 | POST | `/orders/:id/events` | `order.take` | `{ events: OrderEventInput[] }` | `{ order, inserted, duplicates, conflicts }` |
-| POST | `/orders/:id/pay` | `order.pay` | `{ rail, amountMinor, tenderedMinor? }` | `{ order, payment, result }` |
+| POST | `/orders/:id/pay` | `order.pay` | `{ rail, amountMinor, tipMinor?, tenderedMinor? }` | `{ order, payment, result }` |
 | POST | `/orders/:id/status` | — | `{ status: CONFIRMED\|READY\|CLOSED\|VOID }` | `{ order }` |
 
 ## Sync — offline outbox (auth)

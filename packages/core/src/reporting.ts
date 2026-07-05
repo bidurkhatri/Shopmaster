@@ -23,6 +23,7 @@ export async function salesReport(ctx: TenantContext, from: Date, to: Date): Pro
 
   let grossMinor = 0;
   let taxMinor = 0;
+  let tipsMinor = 0;
   const railMap = new Map<string, { amountMinor: number; count: number }>();
   const channelMap = new Map<string, { amountMinor: number; count: number }>();
   const itemMap = new Map<string, { qty: number; revenueMinor: number }>();
@@ -53,6 +54,7 @@ export async function salesReport(ctx: TenantContext, from: Date, to: Date): Pro
 
     for (const p of o.payments) {
       if (p.status !== "CAPTURED") continue;
+      tipsMinor += p.tipMinor;
       const r = railMap.get(p.rail) ?? { amountMinor: 0, count: 0 };
       r.amountMinor += p.amountMinor;
       r.count += 1;
@@ -68,6 +70,7 @@ export async function salesReport(ctx: TenantContext, from: Date, to: Date): Pro
     grossMinor,
     taxMinor,
     netMinor: grossMinor - taxMinor,
+    tipsMinor,
     byRail: [...railMap.entries()].map(([rail, v]) => ({ rail: rail as PaymentRail, ...v })).sort((a, b) => b.amountMinor - a.amountMinor),
     byChannel: [...channelMap.entries()].map(([channel, v]) => ({ channel: channel as Channel, ...v })).sort((a, b) => b.amountMinor - a.amountMinor),
     topItems: [...itemMap.entries()]

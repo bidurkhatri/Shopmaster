@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/store";
 import { useHydrated } from "@/lib/useHydrated";
-import { Button, Money, BrandStyle } from "@/components/ui";
+import { Button, Money, BrandStyle, Skeleton } from "@/components/ui";
+import { IconCheck, IconStore, IconCart, IconArrowRight } from "@/components/icons";
 import { enqueueEvents } from "@/lib/outbox";
 import { lineTotal, uid } from "@/lib/pricing";
 import type { MenuCategoryDTO, OrderEventInput } from "@shopmaster/shared";
@@ -25,6 +26,7 @@ export default function KioskPage() {
   const { token, organization, deviceId } = useAuth();
   const currency = organization?.currency ?? "AUD";
   const [menu, setMenu] = useState<MenuCategoryDTO[]>([]);
+  const [loading, setLoading] = useState(true);
   const [locId, setLocId] = useState<string | null>(null);
   const [cart, setCart] = useState<Line[]>([]);
   const [started, setStarted] = useState(false);
@@ -36,11 +38,15 @@ export default function KioskPage() {
       router.replace("/login");
       return;
     }
-    api.get<MenuCategoryDTO[]>("/menu").then(setMenu);
+    api
+      .get<MenuCategoryDTO[]>("/menu")
+      .then(setMenu)
+      .finally(() => setLoading(false));
     api.get<{ locations: { id: string }[] }>("/context").then((c) => setLocId(c.locations[0]?.id ?? null));
   }, [hydrated, token, router]);
 
   const subtotal = useMemo(() => cart.reduce((s, l) => s + lineTotal(l), 0), [cart]);
+  const cartCount = useMemo(() => cart.reduce((s, l) => s + l.qty, 0), [cart]);
 
   function add(it: { id: string; name: string; priceMinor: number; station: string; available: boolean }) {
     if (!it.available) return;
@@ -75,59 +81,114 @@ export default function KioskPage() {
     }, 5000);
   }
 
+  /* --------------------------------------------------------------- order placed */
+
   if (placedNo) {
     return (
       <Full>
-        <div className="text-center">
-          <div className="mx-auto mb-4 grid h-20 w-20 place-items-center rounded-full bg-emerald-100 text-4xl">✓</div>
-          <h1 className="text-3xl font-bold">Order placed</h1>
-          <p className="mt-2 text-lg text-slate-500">Your number is</p>
-          <div className="my-3 text-6xl font-black text-brand">{placedNo}</div>
-          <p className="text-slate-500">Please pay at the counter.</p>
+        <div className="animate-rise text-center">
+          <div className="mx-auto mb-6 grid h-24 w-24 place-items-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+            <IconCheck className="h-12 w-12" />
+          </div>
+          <h1 className="text-4xl font-bold text-ink">Order placed</h1>
+          <p className="mt-3 text-lg text-muted">Your order number is</p>
+          <div className="my-4 text-7xl font-black tracking-tight text-brand">{placedNo}</div>
+          <p className="text-muted">Please pay at the counter.</p>
         </div>
       </Full>
     );
   }
 
+  /* --------------------------------------------------------------- attract screen */
+
   if (!started) {
     return (
       <Full>
         <BrandStyle primary={organization?.branding?.primaryColor} accent={organization?.branding?.accentColor} />
-        <button onClick={() => setStarted(true)} className="tap text-center">
-          <div className="mx-auto mb-6 grid h-24 w-24 place-items-center rounded-3xl bg-brand text-4xl text-white">🍽️</div>
-          <h1 className="text-4xl font-black">{organization?.name}</h1>
-          <p className="mt-3 rounded-full bg-brand px-8 py-4 text-xl font-semibold text-white">Tap to order</p>
+        <button onClick={() => setStarted(true)} className="tap group flex flex-col items-center text-center">
+          <div className="mb-8 grid h-28 w-28 place-items-center rounded-3xl bg-brand text-white shadow-lift transition-transform group-hover:scale-105">
+            <IconStore className="h-14 w-14" />
+          </div>
+          <h1 className="text-5xl font-black tracking-tight text-ink">{organization?.name ?? "Self-order"}</h1>
+          <p className="mt-4 text-lg text-muted">Order and pay in seconds</p>
+          <span className="mt-8 inline-flex items-center gap-2 rounded-full bg-brand px-10 py-5 text-xl font-semibold text-white shadow-soft">
+            Tap to order <IconArrowRight className="h-6 w-6" />
+          </span>
         </button>
       </Full>
     );
   }
 
+  /* --------------------------------------------------------------- ordering */
+
   return (
-    <div className="min-h-screen bg-slate-50 pb-28">
+    <div className="min-h-screen bg-bg pb-28">
       <BrandStyle primary={organization?.branding?.primaryColor} accent={organization?.branding?.accentColor} />
-      <header className="sticky top-0 z-10 bg-brand px-6 py-4 text-white">
+      <header className="sticky top-0 z-10 flex items-center gap-3 bg-brand px-6 py-4 text-white shadow-soft">
+        <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/20">
+          <IconStore className="h-5 w-5" />
+        </span>
         <h1 className="text-xl font-bold">{organization?.name} · Self-order</h1>
       </header>
+
       <div className="mx-auto max-w-4xl p-4">
-        {menu.map((c) => (
-          <section key={c.id} className="mb-6">
-            <h2 className="mb-3 text-lg font-bold">{c.name}</h2>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {c.items.map((it) => (
-                <button key={it.id} data-testid="menu-item" onClick={() => add(it)} disabled={!it.available} className={`tap rounded-2xl border-2 p-5 text-left ${it.available ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50 opacity-50"}`}>
-                  <div className="text-lg font-bold">{it.name}</div>
-                  <div className="mt-1 text-brand"><Money minor={it.priceMinor} currency={currency} /></div>
-                </button>
-              ))}
-            </div>
-          </section>
-        ))}
+        {loading ? (
+          <div className="space-y-8">
+            {[0, 1].map((s) => (
+              <section key={s}>
+                <Skeleton className="mb-3 h-6 w-40" />
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {[0, 1, 2, 3, 4, 5].map((i) => (
+                    <Skeleton key={i} className="h-28 rounded-2xl" />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : (
+          menu.map((c) => (
+            <section key={c.id} className="mb-8">
+              <h2 className="mb-3 text-lg font-bold text-ink">{c.name}</h2>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {c.items.map((it) => (
+                  <button
+                    key={it.id}
+                    data-testid="menu-item"
+                    onClick={() => add(it)}
+                    disabled={!it.available}
+                    className={`tap flex min-h-28 flex-col justify-between rounded-2xl border p-5 text-left shadow-soft ${
+                      it.available ? "border-line bg-surface hover:border-brand" : "cursor-not-allowed border-line bg-surface-2 opacity-55"
+                    }`}
+                  >
+                    <div className="text-lg font-bold text-ink">{it.name}</div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="font-semibold text-brand">
+                        <Money minor={it.priceMinor} currency={currency} />
+                      </span>
+                      {!it.available && <span className="text-xs font-medium text-rose-500">Sold out</span>}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))
+        )}
       </div>
+
       {cart.length > 0 && (
-        <div className="fixed inset-x-0 bottom-0 border-t bg-white p-4">
-          <div className="mx-auto flex max-w-4xl items-center gap-4">
-            <div className="flex-1 text-sm text-slate-600">{cart.reduce((s, l) => s + l.qty, 0)} items · <Money minor={subtotal} currency={currency} /> + tax</div>
-            <Button size="lg" onClick={place}>Place order</Button>
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface shadow-lift">
+          <div className="mx-auto flex max-w-4xl items-center gap-4 p-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-ink">
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-brand/10 text-brand">
+                <IconCart className="h-5 w-5" />
+              </span>
+              <span>
+                {cartCount} {cartCount === 1 ? "item" : "items"} · <Money minor={subtotal} currency={currency} /> <span className="text-muted">+ tax</span>
+              </span>
+            </div>
+            <Button size="lg" className="ml-auto" onClick={place} icon={<IconCheck className="h-5 w-5" />}>
+              Place order
+            </Button>
           </div>
         </div>
       )}
@@ -136,5 +197,5 @@ export default function KioskPage() {
 }
 
 function Full({ children }: { children: React.ReactNode }) {
-  return <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">{children}</div>;
+  return <div className="flex min-h-screen items-center justify-center bg-bg p-6">{children}</div>;
 }

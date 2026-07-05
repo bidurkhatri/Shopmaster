@@ -2,7 +2,9 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
-import { StorefrontOrdering } from "@/components/StorefrontOrdering";
+import { StorefrontOrdering, StorefrontSkeleton } from "@/components/StorefrontOrdering";
+import { EmptyState } from "@/components/ui";
+import { IconStore } from "@/components/icons";
 import type { MenuCategoryDTO, OrganizationDTO } from "@shopmaster/shared";
 
 interface TableResponse {
@@ -23,8 +25,13 @@ export default function TableOrderPage() {
       .catch((e) => setError((e as Error).message));
   }, [qrToken]);
 
-  if (error) return <Centered>Table not found.</Centered>;
-  if (!data) return <Centered>Loading menu…</Centered>;
+  if (error)
+    return (
+      <div className="mx-auto max-w-md px-4 py-16">
+        <EmptyState icon={<IconStore className="h-6 w-6" />} title="Table not found" description="This QR code isn't active. Please ask a staff member for help." />
+      </div>
+    );
+  if (!data) return <StorefrontSkeleton mode="qr" />;
 
   return (
     <StorefrontOrdering
@@ -35,8 +42,4 @@ export default function TableOrderPage() {
       tableLabel={data.table.label}
     />
   );
-}
-
-function Centered({ children }: { children: React.ReactNode }) {
-  return <div className="flex min-h-screen items-center justify-center text-slate-400">{children}</div>;
 }

@@ -2,7 +2,9 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
-import { Card, Money, Badge } from "@/components/ui";
+import { Card, Badge, Skeleton, EmptyState } from "@/components/ui";
+import { IconReceipt, IconClock, IconCheck } from "@/components/icons";
+import { Receipt } from "@/components/Receipt";
 import type { OrderDTO } from "@shopmaster/shared";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -19,6 +21,20 @@ const STATUS_TONE: Record<string, "slate" | "amber" | "green" | "blue"> = {
   CLOSED: "blue",
   VOID: "slate",
 };
+const STATUS_HINT: Record<string, string> = {
+  OPEN: "We've received your order.",
+  CONFIRMED: "The kitchen is preparing your order.",
+  READY: "Your order is ready!",
+  CLOSED: "Thanks for your order.",
+  VOID: "This order was cancelled.",
+};
+/** Progress steps for the visual tracker. */
+const STEPS = [
+  { key: "CONFIRMED", label: "In the kitchen" },
+  { key: "READY", label: "Ready" },
+  { key: "CLOSED", label: "Completed" },
+];
+const STEP_INDEX: Record<string, number> = { OPEN: 0, CONFIRMED: 0, READY: 1, CLOSED: 2 };
 
 export default function OrderStatusPage() {
   const { id } = useParams<{ id: string }>();
@@ -36,34 +52,78 @@ export default function OrderStatusPage() {
     return () => clearInterval(t);
   }, [id]);
 
-  if (error) return <div className="flex min-h-screen items-center justify-center text-slate-400">Order not found.</div>;
-  if (!order) return <div className="flex min-h-screen items-center justify-center text-slate-400">Loading…</div>;
+  if (error)
+    return (
+      <div className="mx-auto max-w-md px-4 py-16">
+        <EmptyState icon={<IconReceipt className="h-6 w-6" />} title="Order not found" description="We couldn't find this order. It may have expired." />
+      </div>
+    );
+
+  if (!order)
+    return (
+      <div className="mx-auto max-w-md space-y-4 px-4 py-10">
+        <Card className="space-y-4 p-6">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-10 w-32" />
+            <Skeleton className="h-6 w-24 rounded-full" />
+          </div>
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </Card>
+      </div>
+    );
+
+  const activeStep = STEP_INDEX[order.status] ?? 0;
+  const isVoid = order.status === "VOID";
 
   return (
-    <div className="mx-auto max-w-md px-4 py-10">
-      <Card className="p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <div className="text-xs uppercase tracking-wide text-slate-400">Order</div>
-            <div className="font-mono text-sm">{order.id.slice(-8)}</div>
-          </div>
-          <Badge tone={STATUS_TONE[order.status] ?? "slate"}>{STATUS_LABEL[order.status] ?? order.status}</Badge>
-        </div>
-        <div className="space-y-1 border-t border-slate-100 pt-3 text-sm">
-          {order.items.map((i) => (
-            <div key={i.id} className="flex justify-between">
-              <span>{i.qty}× {i.nameSnapshot}</span>
-              <Money minor={i.lineTotalMinor} currency={order.currency} />
+    <div className="min-h-screen bg-bg">
+      <div className="mx-auto max-w-md space-y-4 px-4 py-10">
+        {/* Status */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-muted">
+              <IconClock className="h-5 w-5" />
+              <span className="text-sm font-medium">Order status</span>
             </div>
-          ))}
-        </div>
-        <div className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-sm">
-          <div className="flex justify-between text-slate-500"><span>Subtotal</span><Money minor={order.subtotalMinor} currency={order.currency} /></div>
-          <div className="flex justify-between text-slate-500"><span>Tax</span><Money minor={order.taxMinor} currency={order.currency} /></div>
-          <div className="flex justify-between pt-1 text-base font-bold"><span>Total</span><Money minor={order.totalMinor} currency={order.currency} /></div>
-          {order.paidMinor > 0 && <div className="flex justify-between text-emerald-600"><span>Paid</span><Money minor={order.paidMinor} currency={order.currency} /></div>}
-        </div>
-      </Card>
+            <Badge tone={STATUS_TONE[order.status] ?? "slate"}>{STATUS_LABEL[order.status] ?? order.status}</Badge>
+          </div>
+
+          <p className="mt-3 text-lg font-semibold text-ink">{STATUS_HINT[order.status] ?? ""}</p>
+
+          {!isVoid && (
+            <ol className="mt-5 flex items-center">
+              {STEPS.map((step, i) => {
+                const done = i < activeStep;
+                const active = i === activeStep && order.status !== "OPEN";
+                const reached = done || active || i <= activeStep;
+                return (
+                  <li key={step.key} className="flex flex-1 items-center last:flex-none">
+                    <div className="flex flex-col items-center">
+                      <div
+                        className={`grid h-8 w-8 place-items-center rounded-full border-2 text-xs font-bold ${
+                          done
+                            ? "border-brand bg-brand text-white"
+                            : active
+                              ? "border-brand text-brand"
+                              : "border-line text-muted"
+                        }`}
+                      >
+                        {done ? <IconCheck className="h-4 w-4" /> : i + 1}
+                      </div>
+                      <span className={`mt-1.5 text-[11px] font-medium ${reached ? "text-ink" : "text-muted"}`}>{step.label}</span>
+                    </div>
+                    {i < STEPS.length - 1 && <div className={`mx-1 h-0.5 flex-1 rounded-full ${i < activeStep ? "bg-brand" : "bg-line"}`} />}
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </Card>
+
+        {/* Receipt */}
+        <Receipt order={order} tableLabel={order.tableLabel} />
+      </div>
     </div>
   );
 }

@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { subscribeOutbox, pendingCount, lastSyncAt, startOutboxSync } from "@/lib/outbox";
 import { useAuth } from "@/lib/store";
+import { Badge } from "@/components/ui";
+import { IconWifi, IconWifiOff, IconClock } from "@/components/icons";
 
 /** Always-visible sync status (SYNC-05 / FE-11): online/offline, outbox depth, last sync. */
 export function SyncIndicator() {
@@ -33,12 +35,25 @@ export function SyncIndicator() {
 
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className={`h-2 w-2 rounded-full ${online ? "bg-emerald-500" : "bg-rose-500"}`} />
-      <span className="font-medium text-slate-600">{online ? "Online" : "Offline"}</span>
+      <span
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium ${
+          online
+            ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+            : "border-rose-500/25 bg-rose-500/10 text-rose-600 dark:text-rose-400"
+        }`}
+      >
+        {online ? <IconWifi className="h-3.5 w-3.5" /> : <IconWifiOff className="h-3.5 w-3.5" />}
+        {online ? "Online" : "Offline"}
+      </span>
       {pending > 0 && (
-        <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-800">{pending} queued</span>
+        <Badge tone="amber">
+          <IconClock className="h-3 w-3" />
+          {pending} queued
+        </Badge>
       )}
-      {last && <span className="hidden text-slate-400 sm:inline">· synced {new Date(last).toLocaleTimeString()}</span>}
+      {last && (
+        <span className="hidden text-muted lg:inline">· synced {new Date(last).toLocaleTimeString()}</span>
+      )}
     </div>
   );
 }

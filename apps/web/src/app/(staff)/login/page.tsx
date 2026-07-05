@@ -3,7 +3,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/store";
-import { Button, Card } from "@/components/ui";
+import { Button, Card, Field, Input, ThemeToggle } from "@/components/ui";
+import { IconStore } from "@/components/icons";
 import type { AuthResponse } from "@shopmaster/shared";
 
 export default function LoginPage() {
@@ -30,40 +31,56 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <Card className="w-full max-w-sm p-6">
-        <div className="mb-1 text-sm font-semibold uppercase tracking-widest text-brand">ShopMaster</div>
-        <h1 className="mb-4 text-xl font-bold">Sign in</h1>
-        <form onSubmit={submit} className="space-y-3">
-          <div>
-            <label className="mb-1 block text-sm text-slate-600">Email</label>
-            <input
-              className="w-full rounded-xl border border-slate-200 px-3 py-2"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              type="email"
-              autoComplete="username"
-            />
+    <main className="relative flex min-h-screen items-center justify-center bg-bg px-4 text-ink">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
+
+      <div className="w-full max-w-sm">
+        <div className="mb-6 flex flex-col items-center text-center">
+          <div className="mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-brand text-white shadow-soft">
+            <IconStore className="h-7 w-7" />
           </div>
-          <div>
-            <label className="mb-1 block text-sm text-slate-600">Password</label>
-            <input
-              className="w-full rounded-xl border border-slate-200 px-3 py-2"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              type="password"
-              autoComplete="current-password"
-            />
-          </div>
-          {error && <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>}
-          <Button type="submit" size="lg" className="w-full" disabled={busy}>
-            {busy ? "Signing in…" : "Sign in"}
-          </Button>
-        </form>
-        <p className="mt-4 text-xs text-slate-400">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-brand">ShopMaster</div>
+          <h1 className="mt-1 text-2xl font-bold text-ink">Welcome back</h1>
+          <p className="mt-1 text-sm text-muted">Sign in to open the register.</p>
+        </div>
+
+        <Card className="p-6">
+          <form onSubmit={submit} className="space-y-4">
+            <Field label="Email">
+              <Input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                type="email"
+                autoComplete="username"
+                placeholder="you@example.com"
+              />
+            </Field>
+            <Field label="Password">
+              <Input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type="password"
+                autoComplete="current-password"
+                placeholder="••••••••"
+              />
+            </Field>
+            {error && (
+              <div className="rounded-xl border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-600 dark:text-rose-400">
+                {error}
+              </div>
+            )}
+            <Button type="submit" size="lg" className="w-full" loading={busy}>
+              Sign in
+            </Button>
+          </form>
+        </Card>
+
+        <p className="mt-4 px-2 text-center text-xs text-muted">
           Tier-1 login (owner/manager). Staff switch by PIN happens on-device, offline (Auth-Flow).
         </p>
-      </Card>
+      </div>
     </main>
   );
 }

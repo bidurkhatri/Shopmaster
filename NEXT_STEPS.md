@@ -12,6 +12,25 @@
 
 Each gap has an ID (`GAP-##`) for the same reason every other document in this repo uses IDs — so it can be turned directly into a ticket. Priority reflects how much *other* work is blocked by leaving it alone, not effort to fix.
 
+## Progress update (implementation built since this doc was written)
+
+This repo is no longer planning-only — the Phase-1 product is built, runnable, and verified, and
+several gaps below are now closed or advanced. See `README.md`, `docs/CODE_MAP.md`, and
+`docs/SHIP_CHECKLIST.md`.
+
+- **GAP-04 (API contract)** — ✅ closed: `docs/API_CONTRACT.md` + a working Express backend.
+- **GAP-05 (multi-tenant isolation test)** — ✅ closed: unit tests + an E2E spec + **Postgres RLS
+  verified** (`packages/db/scripts/verify-rls.mjs`, `postgres-rls` CI job).
+- **GAP-06 (sync-conflict test)** — ✅ closed: expanded DB-09 unit suite + an offline-sync E2E spec.
+- **GAP-07 (merchant onboarding)** — ✅ built: `/onboarding/signup` + a web signup wizard → live POS.
+- **GAP-02 (ToS/Privacy/Merchant Agreement)** — ◑ drafts in `docs/legal/` (need counsel review).
+- **GAP-03 (unit economics)**, **GAP-09 (hardware list)**, **GAP-10 (breach plan)**,
+  **GAP-12 (GTM)** — ◑ drafted under `docs/business/` and `docs/operations/`.
+- **DB-02 / DB-04 (Postgres + RLS)** — ✅ verified against PostgreSQL 16 (`docs/POSTGRES.md`).
+- **GAP-01 (legal entity)** — still open; a genuine business decision, not an engineering task.
+
+The original gap analysis below is preserved for context.
+
 ## Priority 1 — Foundation (nothing else is real without these)
 
 - **GAP-01 — Legal entity structure is still undecided.** Standalone venture, or built under/alongside Fintex Australia — raised as an open question in the original PRD and never resolved across eight further documents. This isn't administrative: it decides who signs a merchant agreement, which compliance regime applies (see GAP-02), and who owns the IP being built from this repo onward.

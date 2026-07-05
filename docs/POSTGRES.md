@@ -233,3 +233,43 @@ is added, so a table can never ship with RLS silently off.
 | money | integer minor units | integer minor units (unchanged) |
 | Tenancy layer 1 | `packages/core/src/tenancy.ts` (BE-10/11) | `packages/core/src/tenancy.ts` (BE-10/11) |
 | Tenancy layer 2 | — (app layer is the only guard) | **RLS policies (DB-04)** keyed to `app.org_id` GUC |
+
+---
+
+## Verification — this was actually run, not just written
+
+The Postgres path and RLS policies were verified end-to-end against **PostgreSQL 16.13**:
+
+- `prisma db push --schema prisma/schema.postgres.prisma` created the schema; the two-tenant seed
+  loaded; **the API ran unchanged on Postgres** (login, reporting, and merchant onboarding all
+  worked against PG — DB-02 proven, zero code change).
+- `prisma/rls.sql` applied cleanly, and connecting as the non-superuser `shopmaster_app` role:
+  - scoped to the Sydney org → saw its **8** orders and **0** of the Nepal org's;
+  - scoped to the Nepal org → saw its **2** orders and **0** of the Sydney org's;
+  - with `app.org_id` unset → saw **0** rows (**fail-closed**).
+
+Reproduce it with the committed script (used by the `postgres-rls` CI job on every push):
+
+```bash
+# against a running Postgres with the schema pushed, seeded, and rls.sql applied:
+DATABASE_URL=postgresql://postgres@host:5432/shopmaster \
+RLS_APP_DATABASE_URL=postgresql://shopmaster_app:app_pw@host:5432/shopmaster \
+pnpm --filter @shopmaster/db verify:rls
+```
+
+## Remaining wiring to make RLS the *active* second layer in the app
+
+App-layer scoping (`packages/core/src/tenancy.ts`) is the primary enforcement today and is always on.
+To also have RLS enforce at runtime, the API must connect as `shopmaster_app` (not a superuser — the
+seed/migrate role) and set the GUC per transaction from the validated `TenantContext`:
+
+```ts
+await prisma.$transaction(async (tx) => {
+  await tx.$executeRawUnsafe(`SELECT set_config('app.org_id', $1, true)`, ctx.organizationId);
+  // ... tenant-scoped queries run here, now doubly guarded ...
+});
+```
+
+This is a deliberate, reviewable change (it routes tenant-scoped data access through a per-request
+transaction) and is the one remaining step to flip DB-04 from "verified correct" to "enforced in the
+running app". The policies themselves are proven correct above.

@@ -10,30 +10,92 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
         with:
           version: 10
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-
       - name: Install
         run: pnpm install --frozen-lockfile
-
       - name: Prisma generate + migrate + seed (SQLite)
         run: |
           pnpm db:generate
           pnpm db:push
           pnpm db:seed
-
       - name: Typecheck
         run: pnpm typecheck
-
       - name: Unit tests
         run: pnpm test
-
       - name: Build
         run: pnpm build
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Prisma setup + build web (SQLite)
+        run: |
+          pnpm db:generate && pnpm db:push && pnpm db:seed
+          pnpm --filter @shopmaster/web build
+      - name: Install Playwright browser
+        run: pnpm --filter @shopmaster/e2e exec playwright install --with-deps chromium
+      - name: Run E2E against a live seeded stack
+        run: |
+          pnpm --filter @shopmaster/api start & API=$!
+          pnpm --filter @shopmaster/web start & WEB=$!
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:4000/api/health >/dev/null && curl -sf http://127.0.0.1:3000 >/dev/null && break
+            sleep 1
+          done
+          pnpm --filter @shopmaster/e2e exec playwright test
+          kill $API $WEB 2>/dev/null || true
+
+  postgres-rls:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: shopmaster
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/shopmaster
+      RLS_APP_DATABASE_URL: postgresql://shopmaster_app:app_pw@localhost:5432/shopmaster
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Generate + migrate + seed on Postgres
+        working-directory: packages/db
+        run: |
+          npx prisma generate --schema prisma/schema.postgres.prisma
+          npx prisma db push --schema prisma/schema.postgres.prisma --skip-generate
+          npx tsx prisma/seed.ts
+      - name: Create runtime role + apply RLS policies
+        run: |
+          psql "$DATABASE_URL" -c "CREATE ROLE shopmaster_app LOGIN PASSWORD 'app_pw';"
+          psql "$DATABASE_URL" -f packages/db/prisma/rls.sql
+      - name: Verify tenant isolation is enforced by the database (DB-04)
+        run: pnpm --filter @shopmaster/db verify:rls

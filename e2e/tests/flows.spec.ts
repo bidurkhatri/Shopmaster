@@ -71,6 +71,18 @@ test("admin inventory: stock levels and low-stock alert (INV-01/02)", async ({ p
   await expect(page.getByText("On hand")).toBeVisible();
 });
 
+test("admin loyalty: rewards members with visits and points (CRM-01/02)", async ({ page }) => {
+  await login(page);
+  await page.goto("/admin");
+  // Growth-tier merchant → the Customers tab is enabled by the capability manifest.
+  await page.getByRole("button", { name: "Customers" }).click();
+  await expect(page.getByText("Rewards members")).toBeVisible();
+  await expect(page.getByText("Points issued")).toBeVisible();
+  // Seeded rewards member with two visits shows up.
+  await expect(page.getByText("Jordan Lee")).toBeVisible();
+  await shot(page, "16-admin-customers");
+});
+
 test("POS tipping: add a tip then charge cash (PAY-06)", async ({ page }) => {
   await login(page);
   await expect(page.getByRole("heading", { name: "Point of Sale" })).toBeVisible();

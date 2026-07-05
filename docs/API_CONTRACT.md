@@ -30,7 +30,7 @@ Money is always an integer in the currency's **minor units** (cents/paisa).
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| POST | `/public/orders` | `{ qrToken? , orgSlug?, fulfillment, customerName?, customerPhone?, deliveryAddress? }` | `OrderDTO` |
+| POST | `/public/orders` | `{ qrToken? , orgSlug?, fulfillment, customerName?, customerPhone?, deliveryAddress?, loyaltyOptIn? }` | `OrderDTO` |
 | GET | `/public/orders/:id` | — | `OrderDTO` |
 | POST | `/public/orders/:id/events` | `{ events: OrderEventInput[] }` | `{ order, inserted, duplicates, conflicts }` |
 | POST | `/public/orders/:id/pay` | `{ rail, amountMinor, tenderedMinor? }` | `{ order, payment, result }` |
@@ -61,6 +61,16 @@ Money is always an integer in the currency's **minor units** (cents/paisa).
 
 Confirming an order auto-deducts sold quantities (idempotent per order, via the domain event bus);
 hitting zero auto-86's the item across every channel, restocking above zero restores it.
+
+## Loyalty / CRM (auth — `reports.view`, Growth+ — CRM-01/02)
+
+| Method | Path | Returns |
+|---|---|---|
+| GET | `/customers` | `CustomerDTO[]` (opt-in rewards members, ranked by spend; visits/points derived) |
+| GET | `/customers/:id` | `CustomerDetailDTO` (with recent order history; 404 cross-tenant — GAP-05) |
+
+Profiles are created only on opt-in: the public order body accepts `loyaltyOptIn` and, when the
+merchant's tier includes loyalty, links the order to a profile keyed by `customerPhone`.
 
 ## Orders (auth staff)
 

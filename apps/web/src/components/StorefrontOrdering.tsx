@@ -38,12 +38,14 @@ export function StorefrontOrdering({
   mode,
   qrToken,
   tableLabel,
+  loyaltyEnabled = false,
 }: {
   org: OrganizationDTO;
   menu: MenuCategoryDTO[];
   mode: "qr" | "online";
   qrToken?: string;
   tableLabel?: string;
+  loyaltyEnabled?: boolean;
 }) {
   const currency = org.currency;
   const toast = useToast();
@@ -52,6 +54,7 @@ export function StorefrontOrdering({
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
+  const [loyaltyOptIn, setLoyaltyOptIn] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -97,6 +100,7 @@ export function StorefrontOrdering({
           customerName: name || undefined,
           customerPhone: phone || undefined,
           deliveryAddress: fulfillment === "DELIVERY" ? address : undefined,
+          loyaltyOptIn: loyaltyOptIn && !!phone,
         },
         false,
       );
@@ -316,6 +320,20 @@ export function StorefrontOrdering({
                     onChange={(e) => setAddress(e.target.value)}
                     className="col-span-2 rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink placeholder:text-muted focus:border-brand focus-visible:outline-none"
                   />
+                )}
+                {loyaltyEnabled && (
+                  <label className="col-span-2 flex cursor-pointer items-center gap-2.5 rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink">
+                    <input
+                      type="checkbox"
+                      checked={loyaltyOptIn}
+                      onChange={(e) => setLoyaltyOptIn(e.target.checked)}
+                      className="h-4 w-4 accent-[var(--brand)]"
+                    />
+                    <span className="flex items-center gap-1.5">
+                      <IconSparkle className="h-3.5 w-3.5 text-brand" />
+                      Join rewards — earn points on every order
+                    </span>
+                  </label>
                 )}
               </div>
             )}

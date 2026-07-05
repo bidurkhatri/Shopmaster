@@ -284,11 +284,12 @@ model AuditLogEntry {
   @@index([organizationId, createdAt])
 }
 
-/// Opt-in only (CRM-01). Phase 2/3.
+/// Opt-in customer profile (CRM-01). Created only when a customer chooses to join rewards; keyed by
+/// their contact method so repeat visits attach to the same profile and loyalty accrues (CRM-02).
 model CustomerProfile {
   id             String   @id @default(cuid())
   organizationId String
-  contactMethod  String
+  contactMethod  String // phone or email the customer gave — the loyalty identity
   name           String?
   optInMarketing Boolean  @default(false)
   createdAt      DateTime @default(now())
@@ -296,6 +297,7 @@ model CustomerProfile {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   orders       Order[]
 
+  @@unique([organizationId, contactMethod]) // one profile per contact per tenant (upsert key)
   @@index([organizationId])
 }
 

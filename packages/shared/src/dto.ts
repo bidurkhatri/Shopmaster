@@ -193,6 +193,32 @@ export const zCreateOrderRequest = z.object({
   note: z.string().optional(),
 });
 
+/* ------------------------------- Loyalty / CRM (CRM-01/02) ------------------------------- */
+
+export interface CustomerDTO {
+  id: string;
+  name: string | null;
+  contactMethod: string;
+  optInMarketing: boolean;
+  visits: number; // completed orders (CONFIRMED/READY/CLOSED)
+  totalSpendMinor: number;
+  points: number; // 1 per major currency unit spent
+  lastVisit: string | null;
+  createdAt: string;
+}
+
+export interface CustomerOrderDTO {
+  id: string;
+  channel: Channel;
+  status: OrderStatus;
+  totalMinor: number;
+  createdAt: string;
+}
+
+export interface CustomerDetailDTO extends CustomerDTO {
+  orders: CustomerOrderDTO[];
+}
+
 /* ------------------------------- Inventory (INV-01/02) ------------------------------- */
 
 export interface InventoryRowDTO {

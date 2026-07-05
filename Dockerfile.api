@@ -1,0 +1,52 @@
+# syntax=docker/dockerfile:1
+
+# ShopMaster API — Express modular monolith (BE-02/03), served as a stateless,
+# horizontally-scalable instance (PLAT-04).
+#
+# Multi-stage: one build stage that installs the workspace and generates the Prisma
+# client, and a slim runtime stage. Note: the API runs its TypeScript sources directly
+# via tsx (apps/api "start" = `tsx src/index.ts`), so the runtime image carries the
+# installed node_modules + sources rather than a compiled dist. This mirrors how the
+# repo runs today and keeps the image faithful to the verified Phase-1 build.
+
+# ---- Stage 1: build — install deps + generate the Prisma client (DB-12/13) ----
+FROM node:22-slim AS build
+WORKDIR /app
+
+# Prisma's query engine needs OpenSSL available at generate and run time.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+# pnpm via corepack, pinned to the version in package.json "packageManager".
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+
+# Copy the whole monorepo: a workspace install needs every package manifest, the
+# workspace config, and the committed lockfile to resolve deterministically.
+COPY . .
+
+# Deterministic install straight from the committed lockfile (fails if it drifts).
+RUN pnpm install --frozen-lockfile
+
+# Generate the Prisma client from packages/db/prisma/schema.prisma.
+RUN pnpm --filter @shopmaster/db generate
+
+# ---- Stage 2: runtime ----
+FROM node:22-slim AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+
+# OpenSSL again for the Prisma engine; corepack pnpm to run the workspace "start" script.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && corepack enable && corepack prepare pnpm@10.33.0 --activate
+
+# Bring over the fully-installed monorepo: deps, the generated Prisma client, and sources.
+COPY --from=build /app /app
+
+# The API listens on API_PORT (defaults to 4000 — apps/api/src/index.ts).
+EXPOSE 4000
+
+# tsx runs the TypeScript entrypoint directly (apps/api "start").
+CMD ["pnpm", "--filter", "@shopmaster/api", "start"]

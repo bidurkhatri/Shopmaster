@@ -7,3 +7,4 @@ export * from "./order/replay.js";
 export * from "./order/service.js";
 export * from "./menu.js";
 export * from "./reporting.js";
+export * from "./onboarding.js";

@@ -2,7 +2,10 @@ import express from "express";
 import cors from "cors";
 import { authenticate } from "./auth-middleware.js";
 import { errorHandler } from "./http.js";
+import { securityHeaders } from "./security.js";
+import { requestLogger } from "./logging.js";
 import { authRouter } from "./routes/auth.js";
+import { onboardingRouter } from "./routes/onboarding.js";
 import { orgsRouter } from "./routes/orgs.js";
 import { menuRouter } from "./routes/menu.js";
 import { ordersRouter } from "./routes/orders.js";
@@ -13,8 +16,10 @@ import { contextRouter } from "./routes/context.js";
 
 export function createApp() {
   const app = express();
+  app.use(securityHeaders); // baseline security response headers (SECURITY.md / PLAT-14)
   app.use(cors());
   app.use(express.json({ limit: "1mb" }));
+  app.use(requestLogger); // structured per-request logging (PLAT-12)
 
   // Attach a validated tenant context from the Bearer token, if present, on every request.
   app.use(authenticate);
@@ -24,6 +29,7 @@ export function createApp() {
   });
 
   app.use("/api/auth", authRouter);
+  app.use("/api", onboardingRouter);
   app.use("/api", orgsRouter);
   app.use("/api", menuRouter);
   app.use("/api", ordersRouter);

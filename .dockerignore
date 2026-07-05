@@ -1,0 +1,49 @@
+# Build-context excludes — keep images small and installs deterministic.
+# Mirrors .gitignore where it matters; deps and build outputs are recreated inside
+# the image, and no local secrets or SQLite data files are ever baked in (PLAT-14).
+
+# Dependencies (reinstalled from the committed lockfile inside the image)
+node_modules
+**/node_modules
+.pnpm-store
+
+# Build outputs
+**/dist
+**/build
+**/.next
+**/out
+**/*.tsbuildinfo
+
+# Local SQLite databases — runtime data lives in a volume or managed Postgres (PLAT-05)
+**/*.db
+**/*.db-journal
+**/*.sqlite
+**/*.sqlite3
+
+# Secrets & local env — never copy into an image (PLAT-14)
+**/.env
+**/.env.local
+**/.env.*.local
+**/.env.example
+
+# Docker + CI artifacts (not needed inside the image)
+Dockerfile.api
+Dockerfile.web
+.dockerignore
+docker-compose.yml
+.git
+.gitignore
+.github
+
+# Tests & tooling output
+coverage
+playwright-report
+test-results
+e2e/.artifacts
+e2e/screenshots
+**/*.log
+
+# Editor / OS
+.idea
+.vscode
+.DS_Store

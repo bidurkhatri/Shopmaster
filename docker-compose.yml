@@ -1,0 +1,75 @@
+# ShopMaster — local / single-host container run.
+#
+# This composes the two images (API + web) for a self-contained run on one host,
+# using the same SQLite default as the dev build (persisted to a named volume).
+# It is NOT the production topology — production runs on a managed container platform
+# (PLAT-03) with managed Postgres (PLAT-05); see docs/DEPLOYMENT.md.
+#
+# The images are defined by Dockerfile.api / Dockerfile.web but are NOT built inside
+# the dev sandbox (which cannot run docker builds). Build them where Docker is
+# available: `docker compose build` then `docker compose up`.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "4000:4000"
+    environment:
+      # Session JWT signing key (Auth-Flow). Override with a real secret — do not ship
+      # this placeholder. In production this comes from a secrets manager (PLAT-14).
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      # SQLite file inside the named volume so data survives container recreation.
+      # Swap for the Postgres URL below to use the optional postgres service (PLAT-05).
+      DATABASE_URL: file:/data/shopmaster.db
+      # Port the API listens on (apps/api/src/index.ts → API_PORT ?? PORT ?? 4000).
+      API_PORT: "4000"
+    volumes:
+      # Named volume for the SQLite database (the DATABASE_URL path above lives here).
+      - shopmaster-db:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        # Baked into the client bundle at build time (apps/web/src/lib/api.ts). For a
+        # single-host run the browser reaches the API on localhost:4000. For a real
+        # deploy set this to the public, browser-reachable API URL (with /api).
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # --- Optional: managed-style Postgres for a production-like run (PLAT-05) --------
+  # Enable with a profile: `docker compose --profile postgres up`.
+  # To use it, also (1) set the api service DATABASE_URL to the postgres URL below and
+  # (2) flip the Prisma datasource provider to "postgresql" in
+  #     packages/db/prisma/schema.prisma (the schema is Postgres-portable by design;
+  #     String status/enums become native enums, TEXT-JSON becomes jsonb — see
+  #     docs/02-architecture and the schema header notes).
+  # In real environments this service is replaced by managed Postgres (Neon, Cloud SQL,
+  # Railway, Fly Postgres, …); this container is only a convenient local stand-in.
+  #
+  # postgres:
+  #   image: postgres:16
+  #   profiles: ["postgres"]
+  #   environment:
+  #     POSTGRES_USER: shopmaster
+  #     POSTGRES_PASSWORD: change-me-in-production
+  #     POSTGRES_DB: shopmaster
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - shopmaster-pg:/var/lib/postgresql/data
+  #   restart: unless-stopped
+  #   # Corresponding api DATABASE_URL:
+  #   #   postgresql://shopmaster:change-me-in-production@postgres:5432/shopmaster?schema=public
+
+volumes:
+  shopmaster-db:
+  # shopmaster-pg:

@@ -1,0 +1,320 @@
+// ShopMaster — Prisma schema, PostgreSQL target (DB-02 / PLAT-05).
+//
+// This is the minimal-change migration path from the self-contained SQLite schema
+// (packages/db/prisma/schema.prisma). It is a VERBATIM copy of every model there — same
+// field names, same types, same indexes — with ONLY the datasource `provider` changed to
+// "postgresql". The point of keeping the types identical is that the application code runs
+// UNCHANGED against Postgres:
+//   - status/role/tier stay `String` (validated by Zod in @shopmaster/shared), not native enums.
+//   - JSON-shaped fields stay `String` holding JSON text (wrapped by the json/i18n helpers in
+//     @shopmaster/shared), not native `jsonb`.
+//   - money stays an integer in the currency's MINOR units (paisa / cents).
+//
+// Tightening these to Postgres-native enums / jsonb is a deliberate, optional follow-up — NOT
+// required to run on Postgres — and would be an application-affecting change, so it is out of
+// scope for this drop-in swap. Multi-tenancy on Postgres adds Row-Level Security (DB-04) as an
+// independent second layer UNDERNEATH the app-layer tenancy helper (packages/core/src/tenancy.ts,
+// BE-10/11); RLS lives in SQL migrations, not in this schema.
+//
+// See docs/POSTGRES.md for the full swap procedure and the CREATE POLICY SQL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// One merchant tenant (AUTHZ-05). Tier + businessType drive the capability manifest (FE-06).
+model Organization {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  tier         String   @default("STARTER") // STARTER | GROWTH | ENTERPRISE
+  businessType String   @default("CAFE") // TEA_STALL | CAFE | BAR | RESTAURANT | FOOD_TRUCK | TAKEAWAY | QSR
+  currency     String   @default("AUD") // AUD | NPR
+  locale       String   @default("en") // en | ne
+  branding     String? // JSON: { primaryColor, accentColor, logoText }
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  locations   Location[]
+  staff       StaffMember[]
+  devices     Device[]
+  categories  MenuCategory[]
+  items       MenuItem[]
+  orders      Order[]
+  orderEvents OrderEvent[]
+  payments    Payment[]
+  auditLogs   AuditLogEntry[]
+  customers   CustomerProfile[]
+  inventory   InventoryItem[]
+}
+
+/// A physical location. LOC-02's tax engine keys off `taxJurisdiction`.
+model Location {
+  id              String   @id @default(cuid())
+  organizationId  String
+  name            String
+  address         String?
+  taxJurisdiction String   @default("AU_GST") // AU_GST | NP_VAT
+  taxRateBps      Int      @default(1000) // basis points: 1000 = 10% GST, 1300 = 13% VAT
+  taxInclusive    Boolean  @default(false) // NP VAT is price-inclusive; AU GST is added on top
+  createdAt       DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tables       TableOrTab[]
+  orders       Order[]
+  devices      Device[]
+
+  @@index([organizationId])
+}
+
+/// Staff identity. `pinHash` backs Tier-2 offline auth; `passwordHash` backs Tier-1 login.
+model StaffMember {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  email          String?
+  role           String   @default("CASHIER") // OWNER | MANAGER | CASHIER | WAITER | KITCHEN
+  pinHash        String
+  passwordHash   String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  orderEvents  OrderEvent[]
+  auditLogs    AuditLogEntry[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+}
+
+/// A paired staff device (DEVICE-02: independently revocable).
+model Device {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  locationId            String?
+  name                  String
+  credentialFingerprint String    @unique
+  pairedAt              DateTime  @default(now())
+  lastSeenAt            DateTime?
+  revoked               Boolean   @default(false)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location?    @relation(fields: [locationId], references: [id])
+  orderEvents  OrderEvent[]
+
+  @@index([organizationId])
+}
+
+model MenuCategory {
+  id             String  @id @default(cuid())
+  organizationId String
+  name           String // JSON i18n { en, ne }
+  sort           Int     @default(0)
+  active         Boolean @default(true)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items        MenuItem[]
+
+  @@index([organizationId])
+}
+
+model MenuItem {
+  id             String  @id @default(cuid())
+  organizationId String
+  categoryId     String
+  name           String // JSON i18n { en, ne }
+  description    String? // JSON i18n { en, ne }
+  priceMinor     Int
+  available      Boolean @default(true) // one-tap "86" (MENU-04)
+  photoUrl       String?
+  station        String  @default("KITCHEN") // KITCHEN | BAR — ticket routing (POS-02)
+  sort           Int     @default(0)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category     MenuCategory   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  modifiers    Modifier[]
+  inventory    InventoryItem?
+
+  @@index([organizationId])
+  @@index([categoryId])
+}
+
+model Modifier {
+  id              String @id @default(cuid())
+  menuItemId      String
+  groupName       String @default("Options")
+  name            String // JSON i18n { en, ne }
+  priceDeltaMinor Int    @default(0)
+  sort            Int    @default(0)
+
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@index([menuItemId])
+}
+
+/// A table (dine-in) or counter (counter-service). `qrToken` is the QR/NFC entry point (QR-01).
+model TableOrTab {
+  id         String   @id @default(cuid())
+  locationId String
+  label      String
+  qrToken    String   @unique
+  status     String   @default("CLOSED") // OPEN | CLOSED
+  createdAt  DateTime @default(now())
+
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  orders   Order[]
+
+  @@index([locationId])
+}
+
+/// The append-only, device-signed event log (DB-06). Order state is REPLAYED from this,
+/// never taken from a client's claimed final state.
+model OrderEvent {
+  id              String   @id @default(cuid())
+  organizationId  String
+  locationId      String?
+  orderId         String
+  type            String // ORDER_CREATED | ITEM_ADDED | ITEM_REMOVED | ITEM_QTY_CHANGED | PAYMENT_CAPTURED | ORDER_CONFIRMED | ORDER_READY | ORDER_CLOSED | ORDER_VOIDED
+  payload         String // JSON
+  deviceId        String?
+  staffId         String?
+  deviceTimestamp DateTime // device-local time — the ordering key for conflict resolution (DB-09)
+  idempotencyKey  String   @unique // BE-04 / DB-08: retried sync can't double-apply
+  receivedAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  device       Device?      @relation(fields: [deviceId], references: [id])
+  staff        StaffMember? @relation(fields: [staffId], references: [id])
+
+  @@index([orderId, deviceTimestamp]) // DB-13: makes replay fast
+  @@index([organizationId])
+}
+
+/// The materialized "current order state" (DB-10) — derived from the event log, rebuildable.
+model Order {
+  id              String    @id @default(cuid())
+  organizationId  String
+  locationId      String
+  tableId         String?
+  channel         String    @default("POS") // POS | KIOSK | QR | ONLINE
+  fulfillment     String    @default("DINE_IN") // DINE_IN | PICKUP | DELIVERY
+  status          String    @default("OPEN") // OPEN | CONFIRMED | READY | CLOSED | VOID
+  currency        String    @default("AUD")
+  subtotalMinor   Int       @default(0)
+  taxMinor        Int       @default(0)
+  totalMinor      Int       @default(0)
+  paidMinor       Int       @default(0)
+  customerId      String?
+  customerName    String?
+  customerPhone   String?
+  deliveryAddress String?
+  note            String?
+  scheduledFor    DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  closedAt        DateTime?
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location         @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  table        TableOrTab?      @relation(fields: [tableId], references: [id])
+  customer     CustomerProfile? @relation(fields: [customerId], references: [id])
+  items        OrderItem[]
+  payments     Payment[]
+  events       OrderEvent[]
+
+  @@index([organizationId, locationId, createdAt]) // DB-12: "today's orders at this location"
+  @@index([status])
+}
+
+model OrderItem {
+  id             String  @id @default(cuid())
+  orderId        String
+  menuItemId     String?
+  lineId         String // stable, client-generated id used to target edits across the event log
+  nameSnapshot   String
+  unitPriceMinor Int
+  qty            Int     @default(1)
+  modifiers      String? // JSON: [{ name, priceDeltaMinor }]
+  lineTotalMinor Int
+  station        String  @default("KITCHEN")
+  note           String?
+  voided         Boolean @default(false)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+/// A settled tender. Never a raw card number — only a processor token (PAY-07).
+model Payment {
+  id             String   @id @default(cuid())
+  organizationId String
+  orderId        String
+  rail           String // CASH | FONEPAY | ESEWA | KHALTI | TYRO
+  amountMinor    Int
+  currency       String
+  status         String   @default("PENDING") // PENDING | AUTHORIZED | CAPTURED | FAILED | REFUNDED
+  processorToken String?
+  tenderedMinor  Int?
+  changeMinor    Int?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([organizationId])
+}
+
+/// Full audit trail (ADMIN-07) — every discount, void, refund, and config change.
+model AuditLogEntry {
+  id             String   @id @default(cuid())
+  organizationId String
+  actorId        String?
+  action         String
+  target         String?
+  before         String? // JSON
+  after          String? // JSON
+  deviceId       String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor        StaffMember? @relation(fields: [actorId], references: [id])
+
+  @@index([organizationId, createdAt])
+}
+
+/// Opt-in only (CRM-01). Phase 2/3.
+model CustomerProfile {
+  id             String   @id @default(cuid())
+  organizationId String
+  contactMethod  String
+  name           String?
+  optInMarketing Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  orders       Order[]
+
+  @@index([organizationId])
+}
+
+/// Phase 2 — schema exists from v1 so Order Service needs no breaking change to call it later (BE-03).
+model InventoryItem {
+  id             String @id @default(cuid())
+  organizationId String
+  menuItemId     String @unique
+  stockLevel     Int    @default(0)
+  reorderPoint   Int    @default(0)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  menuItem     MenuItem     @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}

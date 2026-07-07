@@ -429,9 +429,13 @@ export async function listKitchenOrders(ctx: TenantContext): Promise<OrderDTO[]>
   return orders.map(toOrderDTO);
 }
 
-export async function listOrders(ctx: TenantContext, statuses?: OrderStatus[]): Promise<OrderDTO[]> {
+export async function listOrders(ctx: TenantContext, statuses?: OrderStatus[], locationId?: string): Promise<OrderDTO[]> {
   const orders = await prisma.order.findMany({
-    where: { organizationId: ctx.organizationId, ...(statuses ? { status: { in: statuses } } : {}) },
+    where: {
+      organizationId: ctx.organizationId,
+      ...(statuses ? { status: { in: statuses } } : {}),
+      ...(locationId ? { locationId } : {}), // MULTI: scope to one location when asked
+    },
     include: { items: true, payments: true, table: true },
     orderBy: { createdAt: "desc" },
     take: 100,

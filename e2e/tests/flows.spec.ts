@@ -167,6 +167,20 @@ test("POS discount over threshold needs a manager PIN (POS-05)", async ({ page }
   await shot(page, "19-pos-discount-approved");
 });
 
+test("admin multi-location: Enterprise chain scopes the dashboard by location (MULTI)", async ({ page }) => {
+  await login(page, "owner@metro-coffee.test");
+  await page.goto("/admin");
+  await expect(page.getByText("Payment mix (per rail)")).toBeVisible();
+  const loc = page.getByLabel("Location");
+  await expect(loc).toBeVisible();
+  await expect(loc.getByRole("option", { name: "CBD" })).toBeAttached();
+  await expect(loc.getByRole("option", { name: "Newtown" })).toBeAttached();
+  await shot(page, "20-admin-multilocation");
+  // Scoping to one site refetches the dashboard without error.
+  await loc.selectOption({ label: "CBD" });
+  await expect(page.getByText("Gross")).toBeVisible();
+});
+
 test("customer QR ordering: scan table → order → confirmation", async ({ page }) => {
   await page.goto("/t/hv-t5");
   await expect(page.getByRole("heading", { name: "Harbour View Kitchen" })).toBeVisible();

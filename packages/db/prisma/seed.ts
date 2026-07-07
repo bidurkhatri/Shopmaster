@@ -289,6 +289,72 @@ async function seedRestaurant() {
   return org;
 }
 
+/** An Enterprise multi-location chain (MULTI): one org, two locations, orders split across both. */
+async function seedChain() {
+  const org = await prisma.organization.create({
+    data: {
+      name: "Metro Coffee Co",
+      slug: "metro-coffee",
+      tier: "ENTERPRISE",
+      businessType: "CAFE",
+      currency: "AUD",
+      locale: "en",
+      branding: JSON.stringify({ primaryColor: "#7c3aed", accentColor: "#a78bfa", logoText: "Metro" }),
+    },
+  });
+
+  const locCbd = await prisma.location.create({
+    data: { organizationId: org.id, name: "CBD", address: "1 George St, Sydney NSW", taxJurisdiction: "AU_GST", taxRateBps: 1000, taxInclusive: false },
+  });
+  const locNewtown = await prisma.location.create({
+    data: { organizationId: org.id, name: "Newtown", address: "200 King St, Newtown NSW", taxJurisdiction: "AU_GST", taxRateBps: 1000, taxInclusive: false },
+  });
+
+  for (const [name, role, pin] of [
+    ["Sasha (Owner)", "OWNER", "1111"],
+    ["Devon (Manager)", "MANAGER", "2222"],
+  ] as Array<[string, string, string]>) {
+    await prisma.staffMember.create({
+      data: { organizationId: org.id, name, email: `${role.toLowerCase()}@metro-coffee.test`, role, pinHash: hash(pin), passwordHash: hash("password123") },
+    });
+  }
+
+  for (let i = 1; i <= 3; i++) await prisma.tableOrTab.create({ data: { locationId: locCbd.id, label: `C${i}`, qrToken: `mc-c${i}`, status: "CLOSED" } });
+  for (let i = 1; i <= 3; i++) await prisma.tableOrTab.create({ data: { locationId: locNewtown.id, label: `N${i}`, qrToken: `mc-n${i}`, status: "CLOSED" } });
+
+  const coffee = await prisma.menuCategory.create({ data: { organizationId: org.id, name: t("Coffee", "Coffee"), sort: 0 } });
+  const food = await prisma.menuCategory.create({ data: { organizationId: org.id, name: t("Food", "Food"), sort: 1 } });
+  const mk = (categoryId: string, name: string, priceMinor: number, station = "BAR", sort = 0) =>
+    prisma.menuItem.create({ data: { organizationId: org.id, categoryId, name: t(name, name), priceMinor, station, sort } });
+  const latte = await mk(coffee.id, "Latte", 500, "BAR", 0);
+  const cold = await mk(coffee.id, "Cold Brew", 550, "BAR", 1);
+  const espresso = await mk(coffee.id, "Espresso", 400, "BAR", 2);
+  const muffin = await mk(food.id, "Blueberry Muffin", 550, "KITCHEN", 0);
+  const bagel = await mk(food.id, "Bagel & Cream Cheese", 850, "KITCHEN", 1);
+
+  // Orders across BOTH locations so the per-location switcher and reports have real data.
+  const chainPlan: Array<{
+    loc: { id: string; taxRateBps: number; taxInclusive: boolean };
+    channel: string;
+    day: number;
+    hour: number;
+    lines: Array<{ item: { id: string; name: string; priceMinor: number; station: string }; qty: number }>;
+    rail: string;
+  }> = [
+    { loc: locCbd, channel: "POS", day: 0, hour: 8, lines: [{ item: latte, qty: 2 }, { item: muffin, qty: 1 }], rail: "TYRO" },
+    { loc: locCbd, channel: "POS", day: 1, hour: 9, lines: [{ item: cold, qty: 1 }, { item: bagel, qty: 1 }], rail: "CASH" },
+    { loc: locCbd, channel: "QR", day: 2, hour: 12, lines: [{ item: espresso, qty: 2 }], rail: "TYRO" },
+    { loc: locNewtown, channel: "POS", day: 0, hour: 10, lines: [{ item: latte, qty: 1 }, { item: bagel, qty: 2 }], rail: "TYRO" },
+    { loc: locNewtown, channel: "POS", day: 1, hour: 15, lines: [{ item: muffin, qty: 3 }], rail: "CASH" },
+    { loc: locNewtown, channel: "ONLINE", day: 3, hour: 11, lines: [{ item: cold, qty: 2 }, { item: espresso, qty: 1 }], rail: "TYRO" },
+  ];
+  for (const p of chainPlan) {
+    await createClosedOrder({ org, loc: p.loc, channel: p.channel, fulfillment: "DINE_IN", when: daysAgo(p.day, p.hour), lines: p.lines, rail: p.rail });
+  }
+
+  return org;
+}
+
 async function createClosedOrder(opts: {
   org: { id: string; currency: string };
   loc: { id: string; taxRateBps: number; taxInclusive: boolean };
@@ -376,8 +442,11 @@ async function main() {
   await seedTeaStall();
   console.log("Seeding Harbour View Kitchen (Sydney, Growth)…");
   await seedRestaurant();
+  console.log("Seeding Metro Coffee Co (Enterprise, 2 locations)…");
+  await seedChain();
 
   const counts = {
+    locations: await prisma.location.count(),
     organizations: await prisma.organization.count(),
     staff: await prisma.staffMember.count(),
     menuItems: await prisma.menuItem.count(),
@@ -387,8 +456,9 @@ async function main() {
   };
   console.log("Seed complete:", counts);
   console.log("\nDemo logins (password123 for OWNER/MANAGER):");
-  console.log("  Nepal tea stall : owner@himalayan-tea.test  · PIN 1234 · storefront /s/himalayan-tea");
+  console.log("  Nepal tea stall  : owner@himalayan-tea.test · PIN 1234 · storefront /s/himalayan-tea");
   console.log("  Sydney restaurant: owner@harbour-view.test  · PIN 1111 · storefront /s/harbour-view · QR /t/hv-t1");
+  console.log("  Metro Coffee (Ent): owner@metro-coffee.test  · PIN 1111 · 2 locations (CBD + Newtown)");
 }
 
 main()

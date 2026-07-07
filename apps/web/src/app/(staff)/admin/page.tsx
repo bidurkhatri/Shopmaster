@@ -94,6 +94,19 @@ function Admin() {
   const [tab, setTab] = useState<Tab>("Dashboard");
   const currency = organization?.currency ?? "AUD";
 
+  // Multi-location (MULTI): an Enterprise chain can scope the back office to one site.
+  const multiLoc = capabilities?.features.multiLocation ?? false;
+  const [locations, setLocations] = useState<{ id: string; name: string }[]>([]);
+  const [locationId, setLocationId] = useState<string>(""); // "" = all locations
+  useEffect(() => {
+    if (!multiLoc) return;
+    api
+      .get<Ctx>("/context")
+      .then((c) => setLocations(c.locations.map((l) => ({ id: l.id, name: l.name }))))
+      .catch(() => undefined);
+  }, [multiLoc]);
+  const scopedLocation = locationId || undefined;
+
   const visibleTabs = TABS.filter((t) => {
     if (t.key === "Inventory") return capabilities?.features.inventory;
     if (t.key === "Customers") return capabilities?.features.loyalty;
@@ -105,9 +118,23 @@ function Admin() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-bold text-ink">Back office</h1>
-        <p className="mt-0.5 text-sm text-muted">Sales, orders, menu and settings for {organization?.name ?? "your store"}.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-ink">Back office</h1>
+          <p className="mt-0.5 text-sm text-muted">Sales, orders, menu and settings for {organization?.name ?? "your store"}.</p>
+        </div>
+        {multiLoc && locations.length > 1 && (
+          <div className="w-48">
+            <Select value={locationId} onChange={(e) => setLocationId(e.target.value)} aria-label="Location" className="py-2 text-sm">
+              <option value="">All locations</option>
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
       </div>
 
       <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
@@ -132,8 +159,8 @@ function Admin() {
         </div>
       </div>
 
-      {tab === "Dashboard" && <Dashboard currency={currency} />}
-      {tab === "Orders" && <Orders />}
+      {tab === "Dashboard" && <Dashboard currency={currency} locationId={scopedLocation} />}
+      {tab === "Orders" && <Orders locationId={scopedLocation} />}
       {tab === "Menu" && <MenuAdmin />}
       {tab === "Inventory" && <Inventory currency={currency} />}
       {tab === "Customers" && <Customers currency={currency} />}
@@ -163,11 +190,11 @@ function rangeQuery(key: RangeKey): string {
   return `?from=${from.toISOString()}&to=${to.toISOString()}`;
 }
 
-function Dashboard({ currency }: { currency: string }) {
+function Dashboard({ currency, locationId }: { currency: string; locationId?: string }) {
   const [r, setR] = useState<SalesReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<RangeKey>("30d");
-  const q = useMemo(() => rangeQuery(range), [range]);
+  const q = useMemo(() => rangeQuery(range) + (locationId ? `&locationId=${locationId}` : ""), [range, locationId]);
 
   useEffect(() => {
     let alive = true;
@@ -383,7 +410,7 @@ function timeOf(iso: string) {
   return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-function Orders() {
+function Orders({ locationId }: { locationId?: string }) {
   const toast = useToast();
   const [orders, setOrders] = useState<OrderDTO[] | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -391,13 +418,15 @@ function Orders() {
 
   const load = () =>
     api
-      .get<OrderDTO[]>("/orders")
+      .get<OrderDTO[]>(`/orders${locationId ? `?locationId=${locationId}` : ""}`)
       .then((list) => setOrders([...list].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))))
       .catch(() => setOrders([]));
 
   useEffect(() => {
+    setOrders(null);
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locationId]);
 
   const open = orders?.find((o) => o.id === openId) ?? null;
 

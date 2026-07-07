@@ -57,7 +57,8 @@ ordersRouter.get(
     const ctx = requireCtx(req);
     const statusParam = typeof req.query.status === "string" ? req.query.status.split(",") : undefined;
     const statuses = statusParam?.filter((s): s is OrderStatus => (ORDER_STATUSES as readonly string[]).includes(s));
-    res.json(await listOrders(ctx, statuses));
+    const locationId = typeof req.query.locationId === "string" && req.query.locationId ? req.query.locationId : undefined;
+    res.json(await listOrders(ctx, statuses, locationId));
   }),
 );
 

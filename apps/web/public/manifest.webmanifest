@@ -1,0 +1,19 @@
+{
+  "name": "ShopMaster",
+  "short_name": "ShopMaster",
+  "description": "One order engine — POS, kiosk, QR/NFC and branded online ordering.",
+  "start_url": "/pos",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1120",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

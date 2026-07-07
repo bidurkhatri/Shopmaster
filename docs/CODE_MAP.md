@@ -19,7 +19,7 @@ scaffolded behind the real interface.
 | PAY-01,04,07 | Cash first-class, adapter per rail, tokenized | `packages/core/payments` | ✅ Cash real; rails **mock** |
 | STAFF-01 | Role-based permissions | `packages/shared/permissions.ts` | ✅ |
 | RPT-01..04 | Sales/day, item/payment mix, per-rail, offline-inclusive, CSV | `packages/core/reporting.ts`, `/reports` | ✅ |
-| HW-01,04 | PWA-first, browser POS | `apps/web` (Next.js) | ✅ web; native RN packaging stubbed |
+| HW-01,04 | PWA-first, browser POS | `apps/web` (Next.js) + manifest/`sw.js`/offline shell (installable, offline-capable) | ✅ PWA; native RN packaging stubbed |
 | SYNC-01..05 | Offline order/cash, outbox, conflict merge, status indicator | `apps/web/src/lib/outbox.ts`, `/sync`, replay | ✅ |
 | ADMIN-01,02 | Web console, config | `apps/web/.../admin` | ✅ |
 | LOC-01,03..05 | NPR/AUD, EN/NE, Nepal IRD/CBMS | i18n + tax done; **IRD/CBMS documented, not built** | ◑ |

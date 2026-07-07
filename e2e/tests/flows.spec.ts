@@ -20,6 +20,22 @@ test("landing page renders the four channels", async ({ page }) => {
   await shot(page, "01-landing");
 });
 
+test("PWA: manifest is linked and the service worker activates (HW-01)", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute("href", "/manifest.webmanifest");
+  const active = await page.evaluate(async () => {
+    if (!("serviceWorker" in navigator)) return false;
+    const timeout = new Promise((r) => setTimeout(() => r(null), 8000));
+    const reg = (await Promise.race([navigator.serviceWorker.ready, timeout])) as ServiceWorkerRegistration | null;
+    return !!reg && !!reg.active;
+  });
+  expect(active).toBe(true);
+  // The manifest parses and declares a standalone app.
+  const manifest = await page.evaluate(() => fetch("/manifest.webmanifest").then((r) => r.json()));
+  expect(manifest.display).toBe("standalone");
+  expect(manifest.name).toBe("ShopMaster");
+});
+
 test("staff POS: login → add items → cash payment (offline-capable outbox)", async ({ page }) => {
   await login(page);
   await expect(page.getByRole("heading", { name: "Point of Sale" })).toBeVisible();

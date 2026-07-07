@@ -119,6 +119,38 @@ test("POS tipping: add a tip then charge cash (PAY-06)", async ({ page }) => {
   await expect(page.getByText(/Paid/)).toBeVisible();
 });
 
+test("POS split bill: even 2-way split settles the order (POS-04)", async ({ page }) => {
+  await login(page);
+  await expect(page.getByRole("heading", { name: "Point of Sale" })).toBeVisible();
+  await page.getByTestId("menu-item").nth(0).click();
+  await page.getByTestId("menu-item").nth(1).click();
+  await page.getByRole("button", { name: "Split bill" }).click();
+  await expect(page.getByRole("heading", { name: "Split bill" })).toBeVisible();
+  await expect(page.getByText("Pay share 1 of 2")).toBeVisible();
+  await shot(page, "18-pos-split");
+  await page.getByRole("button", { name: "Cash", exact: true }).click();
+  await expect(page.getByText("Pay share 2 of 2")).toBeVisible();
+  await page.getByRole("button", { name: "Cash", exact: true }).click();
+  await expect(page.getByText(/split.*settled/i)).toBeVisible();
+});
+
+test("POS discount over threshold needs a manager PIN (POS-05)", async ({ page }) => {
+  await login(page);
+  await page.getByTestId("menu-item").nth(0).click();
+  await page.getByTestId("menu-item").nth(1).click();
+  // A 25% discount trips the manager-approval gate and blocks payment until approved.
+  await page.getByLabel("Discount value").fill("25");
+  await expect(page.getByText(/Manager approval required/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Take Payment" })).toBeDisabled();
+  await page.getByText(/tap to approve/).click();
+  await expect(page.getByRole("heading", { name: "Manager approval" })).toBeVisible();
+  await page.getByLabel("Manager PIN").fill("1111");
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByText(/Discount approved by/).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Take Payment" })).toBeEnabled();
+  await shot(page, "19-pos-discount-approved");
+});
+
 test("customer QR ordering: scan table → order → confirmation", async ({ page }) => {
   await page.goto("/t/hv-t5");
   await expect(page.getByRole("heading", { name: "Harbour View Kitchen" })).toBeVisible();

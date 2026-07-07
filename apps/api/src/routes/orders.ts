@@ -16,8 +16,12 @@ import {
   zSyncBatch,
   zOrderStatus,
   ORDER_STATUSES,
+  can,
   type OrderStatus,
+  type Role,
 } from "@shopmaster/shared";
+import { authorizeOverride } from "@shopmaster/core";
+import { prisma } from "@shopmaster/db";
 import { z } from "zod";
 import { h, HttpError, requireCtx } from "../http.js";
 import { requireAuth, requirePermission } from "../auth-middleware.js";
@@ -25,7 +29,7 @@ import { requireAuth, requirePermission } from "../auth-middleware.js";
 export const ordersRouter = Router();
 
 const zEventsBody = zSyncBatch.pick({ events: true });
-const zStatusBody = z.object({ status: zOrderStatus });
+const zStatusBody = z.object({ status: zOrderStatus, overridePin: z.string().optional() });
 
 /** Fetch an order, enforcing tenant isolation at the API boundary (GAP-05). */
 async function getOrderScoped(orgId: string, id: string) {
@@ -117,8 +121,29 @@ ordersRouter.post(
   h(async (req, res) => {
     const ctx = requireCtx(req);
     await getOrderScoped(ctx.organizationId, req.params.id);
-    const { status } = zStatusBody.parse(req.body);
+    const { status, overridePin } = zStatusBody.parse(req.body);
     if (status === "OPEN") throw new HttpError(400, "Cannot set status back to OPEN");
+
+    // Voiding is a controlled action (POS-11): the caller must hold order.void, or supply a manager
+    // PIN that does. The approval is audited by authorizeOverride's caller path below.
+    if (status === "VOID") {
+      const role = ctx.role as Role | undefined;
+      const hasPerm = role ? can(role, "order.void") : false;
+      if (!hasPerm) {
+        const approval = overridePin ? await authorizeOverride(ctx.organizationId, overridePin, "order.void") : null;
+        if (!approval) throw new HttpError(403, "Voiding an order requires a manager PIN");
+        await prisma.auditLogEntry.create({
+          data: {
+            organizationId: ctx.organizationId,
+            actorId: approval.staffId,
+            action: "OVERRIDE_APPROVED",
+            target: `order.void:${req.params.id}`,
+            after: JSON.stringify({ approvedBy: approval.name }),
+          },
+        });
+      }
+    }
+
     await setOrderStatus(ctx, req.params.id, status);
     res.json({ order: await getOrderDTO(req.params.id) });
   }),

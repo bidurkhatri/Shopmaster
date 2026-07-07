@@ -14,6 +14,7 @@ import {
   IconCash,
   IconCard,
   IconReceipt,
+  IconUsers,
 } from "@/components/icons";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/store";
@@ -73,10 +74,14 @@ function Pos() {
   const [fulfillment, setFulfillment] = useState<Fulfillment>("DINE_IN");
   const [tableId, setTableId] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
+  const [splitting, setSplitting] = useState(false);
   const [online, setOnline] = useState(true);
 
   const [discKind, setDiscKind] = useState<DiscKind>("pct");
   const [discInput, setDiscInput] = useState("");
+  const [approvedFor, setApprovedFor] = useState<string | null>(null); // discount signature a manager approved
+  const [approverName, setApproverName] = useState<string | null>(null);
+  const [pinPrompt, setPinPrompt] = useState(false);
 
   useEffect(() => {
     setOnline(navigator.onLine);
@@ -109,6 +114,13 @@ function Pos() {
   }, [discInput, discKind, t.totalMinor]);
   const grandTotalMinor = Math.max(0, t.totalMinor - discountMinor);
 
+  // Discounts at or above this share of the bill need a manager PIN to apply (POS-05).
+  const DISCOUNT_APPROVAL_PCT = 20;
+  const discountPct = t.totalMinor > 0 ? (discountMinor / t.totalMinor) * 100 : 0;
+  const discountSig = `${discKind}:${discInput}`;
+  const needsApproval = discountMinor > 0 && discountPct >= DISCOUNT_APPROVAL_PCT && approvedFor !== discountSig;
+  const isApproved = discountMinor > 0 && approvedFor === discountSig && !!approverName;
+
   // Items with no modifiers add directly (unchanged behaviour); items with modifiers open the
   // customization sheet first. addItem accepts the resolved modifier list from that sheet.
   function tapItem(it: MenuItemDTO) {
@@ -139,6 +151,8 @@ function Pos() {
     setCart([]);
     setTableId(null);
     setDiscInput("");
+    setApprovedFor(null);
+    setApproverName(null);
   }
 
   function buildBaseEvents(orderId: string): OrderEventInput[] {
@@ -236,6 +250,58 @@ function Pos() {
     setModItem(null);
     resetOrder();
     toast({ title: `Paid via ${rail} ✓`, tone: "success" });
+  }
+
+  /* -------------------------------------------------- split bill (POS-04, online multi-tender) */
+
+  // Create the order server-side and send it to the kitchen, so its shares can be paid one by one.
+  async function createOnlineOrder(): Promise<string> {
+    const order = await api.post<{ id: string }>("/orders", { channel: "POS", fulfillment, tableId: tableId ?? undefined });
+    const events: OrderEventInput[] = cart.map((l) => ({
+      orderId: order.id,
+      type: "ITEM_ADDED",
+      payload: {
+        lineId: l.lineId,
+        menuItemId: l.menuItemId,
+        nameSnapshot: l.name,
+        unitPriceMinor: l.unitPriceMinor,
+        qty: l.qty,
+        station: l.station,
+        modifiers: l.modifiers.length ? l.modifiers : undefined,
+      },
+      deviceTimestamp: new Date().toISOString(),
+      idempotencyKey: `${order.id}:add:${l.lineId}`,
+    }));
+    await api.post(`/orders/${order.id}/events`, { events });
+    await api.post(`/orders/${order.id}/status`, { status: "CONFIRMED" });
+    return order.id;
+  }
+
+  async function paySplitShare(orderId: string, amountMinor: number, rail: PaymentRail) {
+    await api.post(`/orders/${orderId}/pay`, { rail, amountMinor });
+  }
+
+  async function closeSplitOrder(orderId: string) {
+    await api.post(`/orders/${orderId}/status`, { status: "CLOSED" });
+  }
+
+  function finishSplit() {
+    setSplitting(false);
+    resetOrder();
+    toast({ title: "Bill split & settled ✓", tone: "success" });
+  }
+
+  // Manager PIN approval for a large discount (POS-05) — verified + audited server-side.
+  async function approveDiscount(pin: string) {
+    const res = await api.post<{ approverName: string }>("/overrides/verify", {
+      pin,
+      permission: "order.discount",
+      context: `${Math.round(discountPct)}% discount`,
+    });
+    setApprovedFor(discountSig);
+    setApproverName(res.approverName);
+    setPinPrompt(false);
+    toast({ title: `Discount approved by ${res.approverName}`, tone: "success" });
   }
 
   const activeItems = menu.find((c) => c.id === activeCat)?.items ?? [];
@@ -427,6 +493,21 @@ function Pos() {
                 className="w-16 rounded-lg border border-line bg-surface px-2 py-1 text-right text-sm text-ink focus:border-brand focus-visible:outline-none"
               />
             </div>
+            {needsApproval && (
+              <button
+                onClick={() => setPinPrompt(true)}
+                className="tap mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-500/25 dark:text-amber-300"
+              >
+                <IconBolt className="h-3.5 w-3.5" />
+                Manager approval required for {Math.round(discountPct)}% discount — tap to approve
+              </button>
+            )}
+            {isApproved && (
+              <div className="mt-2 flex items-center justify-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                <IconCheck className="h-3.5 w-3.5" />
+                Discount approved by {approverName}
+              </div>
+            )}
           </div>
         )}
 
@@ -452,9 +533,19 @@ function Pos() {
         </div>
 
         <div className="mt-3 grid gap-2">
-          <Button size="lg" icon={<IconCash className="h-5 w-5" />} disabled={!cart.length} onClick={() => setPaying(true)}>
+          <Button size="lg" icon={<IconCash className="h-5 w-5" />} disabled={!cart.length || needsApproval} onClick={() => setPaying(true)}>
             Take Payment
           </Button>
+          {capabilities?.features.splitBill && (
+            <Button
+              variant="secondary"
+              icon={<IconUsers className="h-4 w-4" />}
+              disabled={!cart.length || !online || needsApproval}
+              onClick={() => setSplitting(true)}
+            >
+              Split bill
+            </Button>
+          )}
           {!quick && (
             <Button variant="secondary" icon={<IconReceipt className="h-4 w-4" />} disabled={!cart.length} onClick={sendToKitchen}>
               Send to Kitchen
@@ -485,7 +576,220 @@ function Pos() {
         onCard={payCard}
         onClose={() => setPaying(false)}
       />
+
+      <SplitModal
+        open={splitting}
+        currency={currency}
+        totalMinor={grandTotalMinor}
+        rails={railsForCurrency(currency as "AUD" | "NPR")}
+        createOrder={createOnlineOrder}
+        payShare={paySplitShare}
+        closeOrder={closeSplitOrder}
+        onDone={finishSplit}
+        onClose={() => setSplitting(false)}
+      />
+
+      <OverridePinModal
+        open={pinPrompt}
+        title="Manager approval"
+        detail={`Authorize a ${Math.round(discountPct)}% discount`}
+        onApprove={approveDiscount}
+        onClose={() => setPinPrompt(false)}
+      />
     </div>
+  );
+}
+
+/** A small manager-PIN prompt used for approvals (POS-05/11). Verifies + audits server-side. */
+function OverridePinModal({
+  open,
+  title,
+  detail,
+  onApprove,
+  onClose,
+}: {
+  open: boolean;
+  title: string;
+  detail: string;
+  onApprove: (pin: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [pin, setPin] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setPin("");
+      setError(null);
+      setBusy(false);
+    }
+  }, [open]);
+
+  async function submit() {
+    if (pin.length < 3) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onApprove(pin);
+    } catch (e) {
+      setError((e as Error).message || "PIN not authorized");
+      setPin("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title={title} size="sm">
+      <p className="mb-3 text-sm text-muted">{detail}. A manager or owner PIN is required.</p>
+      <input
+        type="password"
+        inputMode="numeric"
+        autoFocus
+        aria-label="Manager PIN"
+        value={pin}
+        onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ""))}
+        onKeyDown={(e) => e.key === "Enter" && submit()}
+        placeholder="••••"
+        className="w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-center text-2xl tracking-widest text-ink focus:border-brand focus-visible:outline-none"
+      />
+      {error && <div className="mt-2 text-center text-sm text-rose-500">{error}</div>}
+      <Button className="mt-3 w-full" loading={busy} disabled={pin.length < 3} onClick={submit}>
+        Approve
+      </Button>
+    </Modal>
+  );
+}
+
+/** Even-split multi-tender (POS-04). Creates the order once, pays each share, closes when settled. */
+function SplitModal({
+  open,
+  currency,
+  totalMinor,
+  rails,
+  createOrder,
+  payShare,
+  closeOrder,
+  onDone,
+  onClose,
+}: {
+  open: boolean;
+  currency: string;
+  totalMinor: number;
+  rails: PaymentRail[];
+  createOrder: () => Promise<string>;
+  payShare: (orderId: string, amountMinor: number, rail: PaymentRail) => Promise<void>;
+  closeOrder: (orderId: string) => Promise<void>;
+  onDone: () => void;
+  onClose: () => void;
+}) {
+  const [ways, setWays] = useState(2);
+  const [paidCount, setPaidCount] = useState(0);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setWays(2);
+      setPaidCount(0);
+      setOrderId(null);
+      setBusy(false);
+    }
+  }, [open]);
+
+  // Even split in minor units: the first `remainder` shares carry one extra minor unit.
+  const shares = useMemo(() => {
+    const base = Math.floor(totalMinor / ways);
+    const rem = totalMinor - base * ways;
+    return Array.from({ length: ways }, (_, i) => base + (i < rem ? 1 : 0));
+  }, [ways, totalMinor]);
+
+  const currentShare = shares[paidCount] ?? 0;
+  const locked = paidCount > 0; // can't change the split once money has been taken
+
+  async function pay(rail: PaymentRail) {
+    setBusy(true);
+    try {
+      const oid = orderId ?? (await createOrder());
+      if (!orderId) setOrderId(oid);
+      await payShare(oid, currentShare, rail);
+      const next = paidCount + 1;
+      setPaidCount(next);
+      if (next >= ways) {
+        await closeOrder(oid);
+        onDone();
+      }
+    } catch {
+      // leave state as-is so the cashier can retry the current share
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Split bill" size="md">
+      <div className="mb-4 flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3">
+        <span className="text-sm font-medium text-muted">Bill total</span>
+        <span className="text-2xl font-bold text-ink">
+          <Money minor={totalMinor} currency={currency} />
+        </span>
+      </div>
+
+      <div className="mb-4">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Split evenly between</div>
+        <div className="flex gap-2">
+          {[2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              disabled={locked}
+              onClick={() => setWays(n)}
+              className={`tap h-10 w-10 rounded-xl border text-sm font-bold transition ${
+                ways === n ? "border-brand bg-brand text-white" : "border-line bg-surface text-ink hover:border-brand/40"
+              } ${locked ? "cursor-not-allowed opacity-50" : ""}`}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-4 grid grid-cols-1 gap-1.5">
+        {shares.map((s, i) => (
+          <div
+            key={i}
+            className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
+              i < paidCount ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : i === paidCount ? "bg-brand/10 text-ink" : "bg-surface-2 text-muted"
+            }`}
+          >
+            <span className="flex items-center gap-2 font-medium">
+              {i < paidCount ? <IconCheck className="h-4 w-4" /> : <span className="w-4 text-center">{i + 1}</span>}
+              Share {i + 1}
+            </span>
+            <Money minor={s} currency={currency} />
+          </div>
+        ))}
+      </div>
+
+      {paidCount < ways ? (
+        <div>
+          <div className="mb-2 text-sm font-semibold text-ink">
+            Pay share {paidCount + 1} of {ways} · <Money minor={currentShare} currency={currency} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {rails.map((r) => (
+              <Button key={r} variant={r === "CASH" ? "primary" : "secondary"} loading={busy} disabled={busy} onClick={() => pay(r)}>
+                {r === "CASH" ? "Cash" : r}
+              </Button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-xl bg-emerald-500/10 px-4 py-3 text-center text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+          All {ways} shares settled.
+        </div>
+      )}
+    </Modal>
   );
 }
 

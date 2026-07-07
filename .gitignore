@@ -28,6 +28,7 @@ coverage/
 playwright-report/
 test-results/
 e2e/.artifacts/
+e2e/walkthrough/
 
 # Editor / OS
 .DS_Store

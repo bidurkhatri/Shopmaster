@@ -8,13 +8,14 @@ import { prisma } from "@shopmaster/db";
 import type { SalesReport, Channel, PaymentRail, Currency } from "@shopmaster/shared";
 import type { TenantContext } from "./tenancy.js";
 
-export async function salesReport(ctx: TenantContext, from: Date, to: Date): Promise<SalesReport> {
+export async function salesReport(ctx: TenantContext, from: Date, to: Date, locationId?: string): Promise<SalesReport> {
   const org = await prisma.organization.findUnique({ where: { id: ctx.organizationId } });
   const currency = (org?.currency ?? "AUD") as Currency;
 
   const orders = await prisma.order.findMany({
     where: {
       organizationId: ctx.organizationId,
+      ...(locationId ? { locationId } : {}), // MULTI: scope to one location when asked
       createdAt: { gte: from, lte: to },
       status: { in: ["CLOSED", "CONFIRMED", "READY"] },
     },

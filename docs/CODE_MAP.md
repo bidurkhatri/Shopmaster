@@ -25,7 +25,7 @@ scaffolded behind the real interface.
 | LOC-01,03..05 | NPR/AUD, EN/NE, Nepal IRD/CBMS | i18n + tax done; **IRD/CBMS documented, not built** | ◑ |
 | INV-01,02 | Inventory: stock tracking, auto-deduct on confirm, auto-86 at zero, low-stock alerts, movement audit | `packages/core/inventory.ts`, `/inventory`, `apps/web/.../admin` Inventory tab | ✅ (Growth+) |
 | CRM-01,02 | Opt-in rewards profiles + loyalty (visits, spend, points derived from orders) | `packages/core/crm.ts`, `/customers`, storefront opt-in, `apps/web/.../admin` Customers tab | ✅ (Growth+) |
-| MULTI | Multi-location | Prisma schema present; feature gated off | ○ Phase 3 |
+| MULTI | Multi-location: Enterprise chain with per-location reports & orders and an admin location switcher | `salesReport`/`listOrders` locationId scoping, admin switcher, seeded 2-location chain (Metro Coffee) | ✅ (Enterprise) |
 
 ## Backend (BE)
 

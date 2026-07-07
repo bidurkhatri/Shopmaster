@@ -10,7 +10,8 @@ export const reportsRouter = Router();
 function range(req: { query: Record<string, unknown> }) {
   const to = typeof req.query.to === "string" ? new Date(req.query.to) : new Date();
   const from = typeof req.query.from === "string" ? new Date(req.query.from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  return { from, to };
+  const locationId = typeof req.query.locationId === "string" && req.query.locationId ? req.query.locationId : undefined;
+  return { from, to, locationId };
 }
 
 reportsRouter.get(
@@ -19,8 +20,8 @@ reportsRouter.get(
   requirePermission("reports.view"),
   h(async (req, res) => {
     const ctx = requireCtx(req);
-    const { from, to } = range(req);
-    res.json(await salesReport(ctx, from, to));
+    const { from, to, locationId } = range(req);
+    res.json(await salesReport(ctx, from, to, locationId));
   }),
 );
 
@@ -31,8 +32,8 @@ reportsRouter.get(
   requirePermission("reports.view"),
   h(async (req, res) => {
     const ctx = requireCtx(req);
-    const { from, to } = range(req);
-    const report = await salesReport(ctx, from, to);
+    const { from, to, locationId } = range(req);
+    const report = await salesReport(ctx, from, to, locationId);
     const rows = [
       ["ShopMaster sales report"],
       ["From", report.from, "To", report.to],

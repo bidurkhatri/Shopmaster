@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
 import { StaffShell } from "@/components/StaffShell";
 import {
@@ -147,30 +147,74 @@ function Admin() {
 
 /* ------------------------------------------------------------------ dashboard */
 
+const RANGES = [
+  { key: "today", label: "Today" },
+  { key: "7d", label: "7 days" },
+  { key: "30d", label: "30 days" },
+] as const;
+type RangeKey = (typeof RANGES)[number]["key"];
+
+/** Build a `?from=&to=` window for the report endpoints from a preset. */
+function rangeQuery(key: RangeKey): string {
+  const to = new Date();
+  const from = new Date();
+  if (key === "today") from.setHours(0, 0, 0, 0);
+  else from.setTime(to.getTime() - parseInt(key, 10) * 86_400_000);
+  return `?from=${from.toISOString()}&to=${to.toISOString()}`;
+}
+
 function Dashboard({ currency }: { currency: string }) {
   const [r, setR] = useState<SalesReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState<RangeKey>("30d");
+  const q = useMemo(() => rangeQuery(range), [range]);
 
   useEffect(() => {
     let alive = true;
+    setLoading(true);
     api
-      .get<SalesReport>("/reports/sales")
+      .get<SalesReport>(`/reports/sales${q}`)
       .then((d) => alive && setR(d))
       .catch(() => undefined)
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
-  }, []);
+  }, [q]);
 
-  if (loading) return <DashboardSkeleton />;
+  const rangePicker = (
+    <div className="flex gap-1 rounded-xl border border-line bg-surface-2 p-1">
+      {RANGES.map((rg) => (
+        <button
+          key={rg.key}
+          onClick={() => setRange(rg.key)}
+          className={`tap rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+            range === rg.key ? "bg-surface text-brand shadow-soft" : "text-muted hover:text-ink"
+          }`}
+        >
+          {rg.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (loading)
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-end">{rangePicker}</div>
+        <DashboardSkeleton />
+      </div>
+    );
   if (!r)
     return (
-      <EmptyState
-        icon={<IconChart className="h-6 w-6" />}
-        title="No report yet"
-        description="Sales insights will appear here once you start taking orders."
-      />
+      <div className="space-y-4">
+        <div className="flex justify-end">{rangePicker}</div>
+        <EmptyState
+          icon={<IconChart className="h-6 w-6" />}
+          title="No report yet"
+          description="Sales insights will appear here once you start taking orders."
+        />
+      </div>
     );
 
   const maxRail = Math.max(1, ...r.byRail.map((x) => x.amountMinor));
@@ -178,6 +222,7 @@ function Dashboard({ currency }: { currency: string }) {
 
   return (
     <div className="space-y-4">
+      <div className="flex justify-end">{rangePicker}</div>
       <div className={`grid grid-cols-2 gap-3 ${r.tipsMinor > 0 ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
         <Stat label="Orders" value={String(r.orderCount)} />
         <Stat label="Gross" value={<Money minor={r.grossMinor} currency={currency} />} />
@@ -241,9 +286,9 @@ function Dashboard({ currency }: { currency: string }) {
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-muted">Top items</h3>
           <a
-            href={`${API_BASE}/reports/sales.csv`}
+            href={`${API_BASE}/reports/sales.csv${q}`}
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand hover:brightness-110"
-            onClick={(e) => downloadCsv(e)}
+            onClick={(e) => downloadCsv(e, q)}
           >
             <IconPrinter className="h-4 w-4" />
             Export CSV
@@ -300,10 +345,10 @@ function DashboardSkeleton() {
   );
 }
 
-async function downloadCsv(e: React.MouseEvent) {
+async function downloadCsv(e: React.MouseEvent, query = "") {
   e.preventDefault();
   const token = useAuth.getState().token;
-  const res = await fetch(`${API_BASE}/reports/sales.csv`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const res = await fetch(`${API_BASE}/reports/sales.csv${query}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
